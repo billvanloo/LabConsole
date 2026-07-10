@@ -1,0 +1,37 @@
+{
+  "http_port": 8080,
+  "max_upload_mb": 200,
+  "sdcard_url_base": "file:///sdcard/",
+  "camera": {
+    "max_streams": 1,
+    "rtsp_fps": 8,
+    "rtsp_width": 640
+  },
+  "printers": [
+    {
+      "id": "voyager01",
+      "name": "VOYAGER-01",
+      "model": "X1 CARBON",
+      "serial": "00M00A000000000",
+      "access_code": "12345678",
+      "ip": "192.168.1.50",
+      "camera": "rtsp"
+    },
+    {
+      "id": "outpost02",
+      "name": "OUTPOST-02",
+      "model": "H2D",
+      "serial": "00W00B000000000",
+      "access_code": "12345678",
+      "camera": "rtsp"
+    },
+    {
+      "id": "scout03",
+      "name": "SCOUT-03",
+      "model": "A1 MINI",
+      "serial": "0309CA000000000",
+      "access_code": "12345678",
+      "camera": "chamber"
+    }
+  ]
+}
