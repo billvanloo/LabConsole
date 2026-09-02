@@ -19,7 +19,11 @@ function connect() {
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "fleet") { fleet = msg.printers; onFleetUpdate(); }
+    if (msg.type === "fleet") {
+      fleet = msg.printers;
+      document.getElementById("demobadge").classList.toggle("hidden", !msg.demo);
+      onFleetUpdate();
+    }
     else if (msg.type === "error") toast(msg.detail, true);
   };
 }
@@ -105,9 +109,26 @@ function wedge(cv, pct, col) {
   c.globalAlpha = 1; c.strokeStyle = col; c.beginPath(); c.moveTo(cx, cy);
   c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.closePath(); c.stroke();
 }
+function camDemo(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.fillStyle = "#050910"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "rgba(63,216,255,.75)"; c.lineWidth = 1;
+    c.strokeRect(w * .2, h * .18, w * .6, h * .66);
+    c.beginPath(); c.moveTo(w * .2, h * .18); c.lineTo(w * .28, h * .08);
+    c.lineTo(w * .72, h * .08); c.lineTo(w * .8, h * .18); c.stroke();
+    const gy = h * .62 + Math.sin(t) * 4;
+    c.strokeStyle = AM; c.beginPath(); c.moveTo(w * .24, gy); c.lineTo(w * .76, gy); c.stroke();
+    c.fillStyle = AM; c.fillRect(w * .24 + ((Math.sin(t * 3) + 1) / 2) * (w * .5), gy - 7, 10, 7);
+    c.strokeStyle = "rgba(63,216,255,.4)"; c.strokeRect(w * .33, h * .66, w * .34, h * .12);
+    c.fillStyle = "rgba(255,255,255,.05)";
+    for (let i = 0; i < 90; i++) c.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4);
+    t += .03;
+  });
+}
 function mountAnims(root) {
   root.querySelectorAll("canvas[data-anim]").forEach(cv => {
-    ({ radar, orbit, scan })[cv.dataset.anim]?.(cv);
+    ({ radar, orbit, scan, camdemo: camDemo })[cv.dataset.anim]?.(cv);
   });
   root.querySelectorAll("canvas.wedge").forEach(cv =>
     wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
@@ -186,6 +207,10 @@ function faceCam(p) {
     return `<canvas class="bganim" data-anim="scan"></canvas>
       <span class="camtag dim">NO SIGNAL</span>
       <span class="camfoot">LIVEVIEW UNAVAILABLE</span>`;
+  if (p.camera === "demo")
+    return `<canvas class="bganim" data-anim="camdemo"></canvas>
+      <span class="camtag rec">LIVE · DEMO</span>
+      <span class="camfoot">SIMULATED FEED</span>`;
   const foot = p.camera === "chamber" ? "CHAMBER IMAGE · ~1 FPS" : "RTSPS :322 RELAY";
   return `<img class="camimg" src="/cam/${p.id}?t=${Date.now()}" alt="">
     <span class="camtag rec">LIVE</span><span class="camfoot">${foot}</span>`;
@@ -279,6 +304,9 @@ function renderDetail(full) {
     const camHtml = (p.camera === "none" || p.state === "offline")
       ? `<canvas class="bganim" data-anim="radar" style="width:100%;height:250px"></canvas>
          <span class="camtag dim">NO SIGNAL</span>`
+      : p.camera === "demo"
+      ? `<canvas class="bganim" data-anim="camdemo" style="width:100%;height:250px"></canvas>
+         <span class="camtag rec">LIVE · DEMO</span>`
       : `<img src="/cam/${p.id}?t=${Date.now()}" alt="">
          <span class="camtag rec">LIVE · ${p.camera === "chamber" ? "CHAMBER ~1FPS" : "RTSPS"}</span>`;
     elDetail.innerHTML = `

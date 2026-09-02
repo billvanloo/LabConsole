@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Technical Reference — Lab Console Archive</title>
+<link rel="stylesheet" href="/static/docs/docs.css">
+</head>
+<body>
+<div class="topbar">
+  <span class="title">LAB CONSOLE</span><span class="sub">— TECHNICAL ARCHIVE</span>
+  <span class="spacer"></span>
+  <a class="consolelink" href="/">◂ RETURN TO CONSOLE</a>
+</div>
+<div class="layout">
+  <nav class="side"><div class="navbox"><div class="inner">
+    <div class="grp">ARCHIVE</div>
+    <a href="/static/docs/index.html">OVERVIEW</a>
+    <a href="/static/docs/operator.html">OPERATOR GUIDE</a>
+    <a href="/static/docs/admin.html">ADMIN GUIDE</a>
+    <a href="/static/docs/reference.html" class="active">TECHNICAL REFERENCE</a>
+    <a href="#s1" class="sub2">— MQTT</a>
+    <a href="#s2" class="sub2">— CAMERA PROTOCOLS</a>
+    <a href="#s3" class="sub2">— FTPS + DISCOVERY</a>
+    <a href="#s4" class="sub2">— WEBSOCKET SCHEMA</a>
+    <a href="#s5" class="sub2">— HTTP API</a>
+    <div class="grp">TRAINING</div>
+    <a href="/static/docs/index.html#demo">DEMO MODE</a>
+    <a href="/static/docs/LabConsole-Manual.pdf">PDF MANUAL ⤓</a>
+  </div></div></nav>
+  <main>
+    <div class="crumb">ARCHIVE / TECHNICAL REFERENCE</div>
+    <h1>TECHNICAL REFERENCE</h1>
+    <div class="h1sub">PROTOCOLS, SCHEMAS, AND THE HTTP API</div>
+
+    <p>The printer-side protocols below are the community-documented LAN Developer Mode
+       interfaces (see the OpenBambuAPI project and the Bambu Lab wiki&rsquo;s third-party
+       integration page). Nothing here uses Bambu Cloud.</p>
+
+    <h2 id="s1"><span class="idx">01</span> MQTT (STATUS + CONTROL)</h2>
+    <p>One TLS connection per printer to port <b>8883</b>, username <code>bblp</code>,
+       password = the printer&rsquo;s access code, self-signed certificate accepted. The
+       console subscribes to the report topic and publishes commands to the request topic:</p>
+    <pre><code>device/&lt;SERIAL&gt;/report    ← status pushes (partial JSON, merged client-side)
+device/&lt;SERIAL&gt;/request   → commands</code></pre>
+    <p>Commands the console sends (each carries a <code>sequence_id</code>):</p>
+    <table class="ref">
+      <tr><th>ACTION</th><th>PAYLOAD (ABBREVIATED)</th></tr>
+      <tr><td>full refresh</td><td><code>{"pushing":{"command":"pushall"}}</code></td></tr>
+      <tr><td>pause / resume / stop</td><td><code>{"print":{"command":"pause"|"resume"|"stop","param":""}}</code></td></tr>
+      <tr><td>chamber light</td><td><code>{"system":{"command":"ledctrl","led_node":"chamber_light","led_mode":"on"|"off",…}}</code></td></tr>
+      <tr><td>start print</td><td><code>{"print":{"command":"project_file","url":"file:///sdcard/&lt;file&gt;.3mf","param":"Metadata/plate_1.gcode","use_ams":true,…}}</code></td></tr>
+    </table>
+    <p>Report fields the console reads: <code>gcode_state</code> (RUNNING / PREPARE / PAUSE /
+       IDLE / FINISH / FAILED), <code>mc_percent</code>, <code>mc_remaining_time</code>,
+       <code>layer_num</code> / <code>total_layer_num</code>, <code>subtask_name</code> /
+       <code>gcode_file</code>, nozzle/bed/chamber temperatures and targets,
+       <code>cooling_fan_speed</code>, <code>spd_lvl_name</code>, <code>lights_report</code>,
+       AMS tray types and colors, and <code>hms</code> / <code>print_error</code> for the
+       ERROR state.</p>
+
+    <h2 id="s2"><span class="idx">02</span> CAMERA PROTOCOLS</h2>
+    <table class="ref">
+      <tr><th>MODELS</th><th>TRANSPORT</th><th>CONSOLE RELAY</th></tr>
+      <tr><td>X1 / X1C / X1E / H2D</td>
+          <td>RTSPS on port <b>322</b>, URL <code>rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1</code>. Requires LAN Mode Liveview.</td>
+          <td>ffmpeg transcodes to MJPEG at a configurable fps/width; frames are re-served as <code>multipart/x-mixed-replace</code>.</td></tr>
+      <tr><td>A1 / A1 Mini / P1</td>
+          <td>Proprietary chamber-image service, TLS on port <b>6000</b>. An 80-byte auth packet (username + access code) is sent; the printer then streams length-prefixed JPEG frames at ~1 fps.</td>
+          <td>Frames pass straight through to the same MJPEG endpoint — no transcoding.</td></tr>
+    </table>
+    <p>The relay hub enforces <code>camera.max_streams</code> (default 1): a new viewer
+       evicts the oldest active relay. The frame queue is depth-2 and drops old frames, so a
+       slow client sees the latest image rather than building latency.</p>
+
+    <h2 id="s3"><span class="idx">03</span> FTPS + DISCOVERY</h2>
+    <p><b>FTPS</b> — implicit TLS on port <b>990</b>, user <code>bblp</code>. Used to list
+       <code>.3mf</code>/<code>.gcode</code> files in the SD root (MLSD, with NLST fallback)
+       and to upload new files ahead of a <code>project_file</code> command.</p>
+    <p><b>SSDP discovery</b> — the console passively listens on UDP ports <b>2021</b> and
+       <b>1990</b> for the printers&rsquo; periodic announcements, matching on the serial in
+       <code>USN</code> and reading the address from <code>Location</code>. When a
+       printer&rsquo;s address changes, its MQTT client reconnects to the new one. If Bambu
+       Studio runs on the same host and holds the port, discovery is skipped silently and
+       configured IPs are used.</p>
+
+    <h2 id="s4"><span class="idx">04</span> WEBSOCKET SCHEMA</h2>
+    <p>Browsers connect to <code>/ws</code>. The server pushes the full fleet snapshot
+       whenever anything changes (checked at 1 Hz):</p>
+    <pre><code>{ "type":"fleet", "version":123, "demo":false, "printers":[ {
+    "id":"voyager01", "name":"VOYAGER-01", "model":"X1 CARBON",
+    "state":"printing",            // idle|printing|paused|error|offline
+    "online":true, "camera":"rtsp",// rtsp|chamber|demo|none
+    "file":"bracket_v3.3mf", "percent":62, "remaining_min":107,
+    "layer":143, "total_layers":230,
+    "nozzle":220, "nozzle_target":220, "bed":65, "bed_target":65,
+    "chamber":41, "fan":100, "speed":"STANDARD", "light":"on",
+    "ams":[{"type":"PLA","color":"#3fd8ff"},…],
+    "hms":[{"attr":…,"code":…}], "print_error":0 } ] }</code></pre>
+    <p>Client → server commands, acknowledged with <code>{"type":"ack",…}</code> or
+       <code>{"type":"error","detail":…}</code>:</p>
+    <pre><code>{ "type":"cmd", "id":"voyager01",
+  "action":"pause|resume|stop|light|start_print|refresh",
+  "on":true,                  // light only
+  "file":"part.3mf" }         // start_print only</code></pre>
+
+    <h2 id="s5"><span class="idx">05</span> HTTP API</h2>
+    <table class="ref">
+      <tr><th>ENDPOINT</th><th>METHOD</th><th>PURPOSE</th></tr>
+      <tr><td>/</td><td>GET</td><td>The console UI.</td></tr>
+      <tr><td>/ws</td><td>GET</td><td>WebSocket (schema above).</td></tr>
+      <tr><td>/cam/&lt;id&gt;</td><td>GET</td><td>MJPEG stream for one printer (<code>multipart/x-mixed-replace</code>).</td></tr>
+      <tr><td>/api/&lt;id&gt;/files</td><td>GET</td><td>JSON list of printable files on the printer&rsquo;s SD card.</td></tr>
+      <tr><td>/api/&lt;id&gt;/upload</td><td>POST</td><td>Multipart upload of a <code>.3mf</code>/<code>.gcode</code> to the SD card.</td></tr>
+      <tr><td>/docs</td><td>GET</td><td>This archive.</td></tr>
+    </table>
+
+    <div class="pagenav">
+      <a href="/static/docs/admin.html">◂ ADMIN GUIDE</a>
+      <a href="/static/docs/index.html">OVERVIEW ▸</a>
+    </div>
+    <div class="foot">LAB CONSOLE TECHNICAL ARCHIVE</div>
+  </main>
+</div>
+</body>
+</html>

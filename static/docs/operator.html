@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operator Guide — Lab Console Archive</title>
+<link rel="stylesheet" href="/static/docs/docs.css">
+</head>
+<body>
+<div class="topbar">
+  <span class="title">LAB CONSOLE</span><span class="sub">— TECHNICAL ARCHIVE</span>
+  <span class="spacer"></span>
+  <a class="consolelink" href="/">◂ RETURN TO CONSOLE</a>
+</div>
+<div class="layout">
+  <nav class="side"><div class="navbox"><div class="inner">
+    <div class="grp">ARCHIVE</div>
+    <a href="/static/docs/index.html">OVERVIEW</a>
+    <a href="/static/docs/operator.html" class="active">OPERATOR GUIDE</a>
+    <a href="#s1" class="sub2">— READING THE DASHBOARD</a>
+    <a href="#s2" class="sub2">— PRINTER STATES</a>
+    <a href="#s3" class="sub2">— CAMERA VIEWS</a>
+    <a href="#s4" class="sub2">— CONTROLS</a>
+    <a href="/static/docs/admin.html">ADMIN GUIDE</a>
+    <a href="/static/docs/reference.html">TECHNICAL REFERENCE</a>
+    <div class="grp">TRAINING</div>
+    <a href="/static/docs/index.html#demo">DEMO MODE</a>
+    <a href="/static/docs/LabConsole-Manual.pdf">PDF MANUAL ⤓</a>
+  </div></div></nav>
+  <main>
+    <div class="crumb">ARCHIVE / OPERATOR GUIDE</div>
+    <h1>OPERATOR GUIDE</h1>
+    <div class="h1sub">READING AND OPERATING THE FLEET CONSOLE</div>
+
+    <h2 id="s1"><span class="idx">01</span> READING THE DASHBOARD</h2>
+    <p>The dashboard is the default wall view. The <b>status bar</b> across the top shows
+       fleet totals (idle / printing / error / offline), the console clock, and a
+       <b>LINK</b> indicator for the browser&rsquo;s connection to the Pi — if LINK is red,
+       what you see may be stale.</p>
+    <p>Each printer is a bezel-framed panel. Panels <b>cycle automatically every ~8
+       seconds</b> between three faces: the status readout, an ambient scanner animation
+       (idle printers only), and — for one printer at a time — the live camera slot, which
+       rotates through the fleet. The state lamp in each panel&rsquo;s header never cycles
+       away, so fleet state stays readable from across the room. <b>Tap any panel</b> to
+       open its detail console.</p>
+
+    <h2 id="s2"><span class="idx">02</span> PRINTER STATES</h2>
+    <table class="legend">
+      <tr><td><span class="lamp idle"></span><span class="sw idle">IDLE</span></td>
+          <td>Steady cyan. Online and ready. Readout shows temperatures and the last job.</td></tr>
+      <tr><td><span class="lamp printing"></span><span class="sw printing">PRINTING</span></td>
+          <td>Pulsing amber. Shows file name, layer count, nozzle/bed temperatures, time remaining, and progress.</td></tr>
+      <tr><td><span class="lamp paused"></span><span class="sw paused">PAUSED</span></td>
+          <td>Steady violet. The job is held and can be resumed from the detail view.</td></tr>
+      <tr><td><span class="lamp error"></span><span class="sw error">ERROR</span></td>
+          <td>Blinking red — and the <b>entire panel bezel flashes red</b> in sync. The readout lists HMS code(s). Error panels never cycle away to other faces.</td></tr>
+      <tr><td><span class="lamp offline"></span><span class="sw offline">OFFLINE</span></td>
+          <td>Dark lamp. No MQTT link — check power, network, and Developer Mode.</td></tr>
+    </table>
+
+    <figure class="shot">
+      <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
+        <div class="figrow">
+          <div class="figpanel"><div class="crt">
+            <div class="phead"><span class="lamp printing"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+            <div class="pbody">
+              <div class="statword printing">PRINTING</div>
+              <div class="fname">sensor_mount_bracket_v3.3mf</div>
+              <div class="kv"><span>LAYER</span><b>143 / 230</b></div>
+              <div class="kv"><span>NOZZLE / BED</span><b class="warm">220° / 65°</b></div>
+              <div class="kv"><span>TIME LEFT</span><b class="warm">1H 47M</b></div>
+              <div class="progrow"><div class="pbar"><i style="width:62%"></i></div><span class="ppct">62%</span></div>
+              <span class="facechip">STATUS</span>
+            </div></div></div>
+          <div class="figpanel error"><div class="crt">
+            <div class="phead"><span class="lamp error"></span><span class="pname">SCOUT-03</span><span class="pmodel">A1 MINI</span></div>
+            <div class="pbody">
+              <div class="statword error">ERROR</div>
+              <div class="errline">HMS 0700-8000-0002-0001<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
+              <div class="kv"><span>JOB HELD AT</span><b>37%</b></div>
+              <div class="progrow"><div class="pbar errbar"><i style="width:37%"></i></div><span class="ppct" style="color:var(--alert)">37%</span></div>
+              <span class="facechip">STATUS</span>
+            </div></div></div>
+        </div>
+      </div>
+      <figcaption><span class="fig">FIG 2.1</span> — A PRINTING PANEL AND AN ERROR PANEL. THE ERROR BEZEL FLASH MATCHES THE CORNER LAMP CADENCE.</figcaption>
+    </figure>
+
+    <figure class="shot">
+      <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
+        <div class="figrow">
+          <div class="figpanel"><div class="crt">
+            <div class="phead"><span class="lamp idle"></span><span class="pname">OUTPOST-02</span><span class="pmodel">H2D</span></div>
+            <div class="pbody"><canvas class="bganim" data-fig="radar"></canvas><span class="facechip">SCANNER · RESTING</span></div>
+          </div></div>
+          <div class="figpanel"><div class="crt">
+            <div class="phead"><span class="lamp idle"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+            <div class="pbody"><canvas class="bganim" data-fig="orbit"></canvas><span class="facechip">SCANNER · RESTING</span></div>
+          </div></div>
+        </div>
+      </div>
+      <figcaption><span class="fig">FIG 2.2</span> — RESTING SCANNER FACES SHOWN BY IDLE PRINTERS BETWEEN STATUS CYCLES. PURELY AMBIENT — NO DATA MEANING.</figcaption>
+    </figure>
+
+    <h2 id="s3"><span class="idx">03</span> CAMERA VIEWS</h2>
+    <p>One camera relay runs at a time; on the dashboard the live slot rotates through the
+       fleet automatically, and opening a detail view pins that printer&rsquo;s camera. What
+       the feed looks like depends on the hardware:</p>
+    <ul>
+      <li><b>X1 Carbon / H2D</b> — real video (RTSPS), relayed at a reduced frame rate to keep the Pi comfortable.</li>
+      <li><b>A1 / A1 Mini</b> — the printer&rsquo;s chamber camera provides roughly <b>one frame per second</b>. The slideshow feel is the hardware&rsquo;s design, not a fault.</li>
+    </ul>
+
+    <figure class="shot">
+      <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
+        <div class="figpanel"><div class="crt">
+          <div class="phead"><span class="lamp printing"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+          <div class="pbody"><canvas class="bganim" data-fig="camdemo"></canvas>
+            <span class="camtag rec">LIVE</span><span class="camfoot">RTSPS :322 RELAY</span></div>
+        </div></div>
+      </div>
+      <figcaption><span class="fig">FIG 3.1</span> — CAMERA FACE (SIMULATED FEED SHOWN). THE ● LIVE TAG IS WHITE.</figcaption>
+    </figure>
+
+    <div class="callout">
+      <div class="ct">◈ NOTE</div>
+      <p>The white <b>● LIVE</b> tag is an indicator, not an alarm — red is reserved exclusively for error signaling. A grey <b>NO SIGNAL</b> tag means liveview is unavailable for that printer; status and controls still work.</p>
+    </div>
+
+    <h2 id="s4"><span class="idx">04</span> CONTROLS</h2>
+    <p>All controls live in the <b>detail console</b> (tap a panel). Buttons grey out when
+       they don&rsquo;t apply to the printer&rsquo;s current state.</p>
+    <table class="ref">
+      <tr><th>CONTROL</th><th>BEHAVIOR</th></tr>
+      <tr><td>⏸ PAUSE / ▶ RESUME</td><td>Holds or resumes the running job. The button swaps depending on state. Resume also clears a recoverable ERROR (e.g. after feeding new filament).</td></tr>
+      <tr><td>■ STOP</td><td>Aborts the job. Asks for confirmation first (see caution below).</td></tr>
+      <tr><td>☼ LIGHT</td><td>Toggles the chamber light — useful before judging a camera view.</td></tr>
+      <tr><td>▲ START PRINT…</td><td>Opens the file dialog: pick a sliced <code>.3mf</code> already on the printer&rsquo;s SD card, or upload one from your device. Selecting a file arms the START button.</td></tr>
+    </table>
+
+    <div class="callout danger">
+      <div class="ct">▲ CAUTION</div>
+      <p>STOP cannot be undone — a stopped job restarts from zero. The console always asks for confirmation before sending it.</p>
+    </div>
+    <div class="callout warn">
+      <div class="ct">◈ GOOD PRACTICE</div>
+      <p>Before starting a print remotely, use the camera to confirm the bed is clear. The console cannot see what the camera cannot.</p>
+    </div>
+
+    <div class="pagenav">
+      <a href="/static/docs/index.html">◂ OVERVIEW</a>
+      <a href="/static/docs/admin.html">ADMIN GUIDE ▸</a>
+    </div>
+    <div class="foot">LAB CONSOLE TECHNICAL ARCHIVE</div>
+  </main>
+</div>
+<script src="/static/docs/figs.js"></script>
+</body>
+</html>

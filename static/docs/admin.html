@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Guide — Lab Console Archive</title>
+<link rel="stylesheet" href="/static/docs/docs.css">
+</head>
+<body>
+<div class="topbar">
+  <span class="title">LAB CONSOLE</span><span class="sub">— TECHNICAL ARCHIVE</span>
+  <span class="spacer"></span>
+  <a class="consolelink" href="/">◂ RETURN TO CONSOLE</a>
+</div>
+<div class="layout">
+  <nav class="side"><div class="navbox"><div class="inner">
+    <div class="grp">ARCHIVE</div>
+    <a href="/static/docs/index.html">OVERVIEW</a>
+    <a href="/static/docs/operator.html">OPERATOR GUIDE</a>
+    <a href="/static/docs/admin.html" class="active">ADMIN GUIDE</a>
+    <a href="#s1" class="sub2">— PRINTER PREREQUISITES</a>
+    <a href="#s2" class="sub2">— INSTALLATION</a>
+    <a href="#s3" class="sub2">— CONFIG REFERENCE</a>
+    <a href="#s4" class="sub2">— RUN AT BOOT / KIOSK</a>
+    <a href="#s5" class="sub2">— TROUBLESHOOTING</a>
+    <a href="/static/docs/reference.html">TECHNICAL REFERENCE</a>
+    <div class="grp">TRAINING</div>
+    <a href="/static/docs/index.html#demo">DEMO MODE</a>
+    <a href="/static/docs/LabConsole-Manual.pdf">PDF MANUAL ⤓</a>
+  </div></div></nav>
+  <main>
+    <div class="crumb">ARCHIVE / ADMIN GUIDE</div>
+    <h1>ADMIN GUIDE</h1>
+    <div class="h1sub">SETUP, CONFIGURATION, AND CARE OF THE CONSOLE</div>
+
+    <h2 id="s1"><span class="idx">01</span> PRINTER PREREQUISITES</h2>
+    <p>Repeat on <b>each printer</b> before adding it to the console:</p>
+    <ol>
+      <li>Update to recent firmware.</li>
+      <li>On the printer screen, switch to <b>LAN Only Mode</b> and enable <b>Developer Mode</b> (Settings → General/Network). Developer Mode opens the local MQTT, live-stream, and FTP channels the console uses. Note that Developer Mode printers cannot simultaneously connect to Bambu Cloud.</li>
+      <li>Record the <b>Access Code</b> (Settings → Network) and <b>Serial Number</b> (Settings → Device).</li>
+      <li><b>X1-series / H2D only</b>: enable <b>LAN Mode Liveview</b> so the RTSPS camera stream is available.</li>
+    </ol>
+    <div class="callout warn">
+      <div class="ct">◈ NOTE</div>
+      <p>Regenerating a printer&rsquo;s access code invalidates the one in <code>config.json</code> — the panel will go OFFLINE until the config is updated.</p>
+    </div>
+
+    <h2 id="s2"><span class="idx">02</span> INSTALLATION</h2>
+    <pre><code>sudo apt update && sudo apt install -y python3-pip ffmpeg
+#   (ffmpeg is only needed for X1/H2D cameras)
+# copy the lab-console folder to /home/pi/lab-console, then:
+cd /home/pi/lab-console
+pip3 install -r requirements.txt --break-system-packages
+cp config.example.json config.json
+nano config.json          # fill in serials + access codes
+python3 server.py         # open http://&lt;pi-address&gt;:8080</code></pre>
+    <p>To evaluate without printers, run <code>python3 server.py --demo</code> — no config
+       file is required.</p>
+
+    <h3>RUNNING ON UBUNTU / OTHER LINUX HOSTS</h3>
+    <p>The console runs unchanged on a standard Ubuntu machine (desktop or server) instead of
+       a Raspberry Pi — nothing in the code is Pi-specific. Install the same way:</p>
+    <pre><code>sudo apt update && sudo apt install -y python3-pip ffmpeg
+cd lab-console
+pip3 install -r requirements.txt --break-system-packages</code></pre>
+    <p>A few environment differences to check:</p>
+    <ul>
+      <li><b>Firewall</b> — Ubuntu often runs <code>ufw</code>, which Raspberry Pi OS does not enable by default. Allow the console&rsquo;s port: <code>sudo ufw allow 8080/tcp</code>.</li>
+      <li><b>Same LAN as the printers</b> — SSDP discovery is a passive listener; the host must sit on the same network segment as the printers, not behind a router hop or separate VLAN.</li>
+      <li><b>Laptops</b> — Wi-Fi power-saving can drop the idle discovery socket or let the machine sleep. Disable suspend and Wi-Fi power management, or use a wired/always-on machine.</li>
+    </ul>
+    <div class="callout">
+      <div class="ct">◈ NOTE</div>
+      <p>A typical Ubuntu machine has far more headroom than a Pi 3 — <code>camera.max_streams</code> in the config can safely be raised above 1 if you want multiple live camera views at once.</p>
+    </div>
+
+    <h2 id="s3"><span class="idx">03</span> CONFIG REFERENCE</h2>
+    <h3>PER PRINTER</h3>
+    <table class="ref">
+      <tr><th>FIELD</th><th>MEANING</th></tr>
+      <tr><td>id</td><td>Short unique key; used in URLs.</td></tr>
+      <tr><td>name</td><td>Display name on the dashboard.</td></tr>
+      <tr><td>model</td><td>Display label (X1 CARBON, H2D, A1 MINI, …).</td></tr>
+      <tr><td>serial</td><td>Printer serial number — used for MQTT topics and SSDP matching.</td></tr>
+      <tr><td>access_code</td><td>LAN access code from the printer screen.</td></tr>
+      <tr><td>ip</td><td>Optional. SSDP discovery fills and updates it automatically; a static or DHCP-reserved address makes startup instant.</td></tr>
+      <tr><td>camera</td><td><code>rtsp</code> for X1-series and H2D, <code>chamber</code> for A1 / A1 Mini / P1-series, <code>none</code> to disable.</td></tr>
+    </table>
+    <h3>GLOBAL</h3>
+    <table class="ref">
+      <tr><th>FIELD</th><th>DEFAULT</th><th>MEANING</th></tr>
+      <tr><td>http_port</td><td>8080</td><td>Port the console serves on.</td></tr>
+      <tr><td>max_upload_mb</td><td>200</td><td>Upload size limit for .3mf files.</td></tr>
+      <tr><td>camera.max_streams</td><td>1</td><td>Concurrent camera relays. Keep at 1 on a Pi 3; a Pi 4/5 can take more. A new viewer evicts the oldest when the limit is hit.</td></tr>
+      <tr><td>camera.rtsp_fps</td><td>8</td><td>Relay frame rate for RTSPS cameras (transcode cost knob).</td></tr>
+      <tr><td>camera.rtsp_width</td><td>640</td><td>Relay width for RTSPS cameras.</td></tr>
+      <tr><td>sdcard_url_base</td><td>file:///sdcard/</td><td>Path base for start-print. Switch to <code>file:///mnt/sdcard/</code> if newer firmware reports file-not-found.</td></tr>
+    </table>
+
+    <h2 id="s4"><span class="idx">04</span> RUN AT BOOT / KIOSK DISPLAY</h2>
+    <pre><code>sudo cp lab-console.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lab-console
+# logs:
+journalctl -u lab-console -f</code></pre>
+    <p>For a dedicated wall display, point a kiosk browser at the console, e.g.
+       <code>chromium-browser --kiosk http://localhost:8080</code>. The frontend pauses its
+       panel cycling while the browser tab is hidden, so an always-on display costs the Pi
+       almost nothing when nobody is looking at it.</p>
+
+    <h2 id="s5"><span class="idx">05</span> TROUBLESHOOTING</h2>
+    <table class="ref">
+      <tr><th>SYMPTOM</th><th>LIKELY CAUSE / FIX</th></tr>
+      <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, Developer Mode, and that the access code matches. If IPs changed, discovery re-finds printers within a minute of their next announcement.</td></tr>
+      <tr><td>X1/H2D camera NO SIGNAL</td><td>LAN Mode Liveview disabled, or ffmpeg not installed. Some H2D firmware versions have temporarily shipped without local liveview pending updates — status and control keep working.</td></tr>
+      <tr><td>A1 camera is ~1 fps</td><td>That is the chamber camera&rsquo;s hardware rate, not a fault.</td></tr>
+      <tr><td>Start print: file not found</td><td>Switch <code>sdcard_url_base</code> to <code>file:///mnt/sdcard/</code>.</td></tr>
+      <tr><td>SD list empty</td><td>Only files in the SD card root are listed; uploads also go to the root.</td></tr>
+      <tr><td>LINK red in the status bar</td><td>Browser lost its WebSocket to the Pi; it reconnects automatically. If persistent, check the service with <code>journalctl</code>.</td></tr>
+    </table>
+
+    <div class="callout danger">
+      <div class="ct">▲ SECURITY</div>
+      <p>The console has no login and printer access codes live in <code>config.json</code>. Keep it on a trusted LAN/VLAN and don&rsquo;t expose port 8080 to the internet.</p>
+    </div>
+
+    <div class="pagenav">
+      <a href="/static/docs/operator.html">◂ OPERATOR GUIDE</a>
+      <a href="/static/docs/reference.html">TECHNICAL REFERENCE ▸</a>
+    </div>
+    <div class="foot">LAB CONSOLE TECHNICAL ARCHIVE</div>
+  </main>
+</div>
+</body>
+</html>

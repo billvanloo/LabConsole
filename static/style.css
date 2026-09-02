@@ -31,6 +31,12 @@ body{background:var(--bg);color:var(--cyan);
 .dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
 .dot.off{background:#2a3247}
 .clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
 .linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
 .linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
 

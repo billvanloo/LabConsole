@@ -15,11 +15,17 @@ from aiohttp import web, WSMsgType
 from bambu import discovery
 from bambu.printer import BambuPrinter
 from bambu import ftps, cameras
+from bambu.demo import DemoPrinter, DEMO_FLEET, DEMO_FILES
 
 ROOT = pathlib.Path(__file__).parent
-CONFIG_PATH = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "config.json")
+DEMO = "--demo" in sys.argv
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+CONFIG_PATH = pathlib.Path(_args[0] if _args else ROOT / "config.json")
 
-CFG = json.loads(CONFIG_PATH.read_text())
+if DEMO:
+    CFG = {"http_port": 8080, "camera": {}, "printers": []}
+else:
+    CFG = json.loads(CONFIG_PATH.read_text())
 PRINTERS: dict[str, BambuPrinter] = {}
 STATE_VERSION = 0
 _version_lock = threading.Lock()
@@ -32,7 +38,7 @@ def _bump(_printer=None):
 
 
 def fleet_view():
-    return {"type": "fleet", "version": STATE_VERSION,
+    return {"type": "fleet", "version": STATE_VERSION, "demo": DEMO,
             "printers": [p.view() for p in PRINTERS.values()]}
 
 
@@ -194,6 +200,8 @@ async def files_handler(request):
     p = PRINTERS.get(request.match_info["id"])
     if not p or not p.ip:
         raise web.HTTPNotFound(text="printer offline")
+    if DEMO:
+        return web.json_response({"files": DEMO_FILES})
     try:
         files = await asyncio.to_thread(ftps.list_printable, p.ip, p.access_code)
         return web.json_response({"files": files})
@@ -205,6 +213,15 @@ async def upload_handler(request):
     p = PRINTERS.get(request.match_info["id"])
     if not p or not p.ip:
         raise web.HTTPNotFound(text="printer offline")
+    if DEMO:
+        reader = await request.multipart()
+        field = await reader.next()
+        name = pathlib.Path(field.filename or "upload.3mf").name
+        while await field.read_chunk(65536):
+            pass
+        if not any(f["name"] == name for f in DEMO_FILES):
+            DEMO_FILES.append({"name": name, "size": 1_000_000})
+        return web.json_response({"ok": True, "name": name})
     reader = await request.multipart()
     field = await reader.next()
     name = pathlib.Path(field.filename or "upload.3mf").name
@@ -230,23 +247,31 @@ async def index(request):
 
 
 def main():
-    for pc in CFG["printers"]:
-        p = BambuPrinter(pc, on_change=_bump)
-        PRINTERS[p.id] = p
-        p.start()
+    if DEMO:
+        print("*** DEMO MODE — simulated fleet, no printers contacted ***")
+        for pc in DEMO_FLEET:
+            p = DemoPrinter(pc, on_change=_bump)
+            PRINTERS[p.id] = p
+            p.start()
+    else:
+        for pc in CFG["printers"]:
+            p = BambuPrinter(pc, on_change=_bump)
+            PRINTERS[p.id] = p
+            p.start()
 
-    by_serial = {p.serial: p for p in PRINTERS.values()}
+        by_serial = {p.serial: p for p in PRINTERS.values()}
 
-    def on_found(serial, ip):
-        p = by_serial.get(serial)
-        if p:
-            p.set_ip(ip)
-            _bump()
+        def on_found(serial, ip):
+            p = by_serial.get(serial)
+            if p:
+                p.set_ip(ip)
+                _bump()
 
-    discovery.start(on_found)
+        discovery.start(on_found)
 
     app = web.Application(client_max_size=int(CFG.get("max_upload_mb", 200)) * 1024 * 1024)
     app.router.add_get("/", index)
+    app.router.add_get("/docs", lambda r: web.HTTPFound("/static/docs/index.html"))
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/cam/{id}", cam_handler)
     app.router.add_get("/api/{id}/files", files_handler)

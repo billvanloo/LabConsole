@@ -1,0 +1,16 @@
+Lab Console
+version: 1.3.0
+date: 2026-09-02
+tree: lab-console/
+
+Feature set at this version:
+  - MQTT monitor + control (pause/resume/stop/light/start-print)
+  - Per-model camera relay (RTSPS :322 for X1C/H2D, chamber :6000 for A1)
+  - FTPS SD listing + upload, passive SSDP discovery
+  - Demo mode (server.py --demo)
+  - In-app Technical Archive at /docs (4 pages)
+  - PDF manual (build_manual.py -> static/docs/LabConsole-Manual.pdf)
+  - ERROR state wording + flashing red bezel; white LIVE camera tag
+
+If any of the above is missing from your working tree, you have an outdated
+copy. See the FILE MANIFEST section of CLAUDE.md to verify.

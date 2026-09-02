@@ -14,6 +14,60 @@ aesthetic with cyan vector line art, amber accents, and red/orange reserved *exc
 for error states. Think Galaxy's Edge spaceport control panel. See "Design language" below
 before touching any UI file.
 
+## FIRST: verify you have the right tree
+
+This project's folder is **`lab-console/`**. An older, incomplete prototype named
+`bambu-console/` existed early in development — it lacks demo mode, the docs site, and
+`build_manual.py`. If your working directory is named `bambu-console` or uses
+`config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
+
+Check `VERSION` at the repo root (should read 1.3.0), then confirm all 23 files are present:
+
+```bash
+cat VERSION
+find . -type f -not -path './.git/*' | sort
+```
+
+Expected file manifest (23 files):
+
+```
+./CLAUDE.md
+./README.md
+./VERSION
+./bambu/cameras.py
+./bambu/demo.py
+./bambu/discovery.py
+./bambu/ftps.py
+./bambu/printer.py
+./build_manual.py
+./config.example.json
+./lab-console.service
+./requirements.txt
+./server.py
+./static/app.js
+./static/docs/LabConsole-Manual.pdf
+./static/docs/admin.html
+./static/docs/docs.css
+./static/docs/figs.js
+./static/docs/index.html
+./static/docs/operator.html
+./static/docs/reference.html
+./static/index.html
+./static/style.css
+```
+
+Quick behavioral confirmations that you're on 1.3.0:
+
+```bash
+grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
+grep -n 'add_get("/docs"' server.py        # docs route exists
+grep -n 'ARCHIVE' static/index.html        # archive link in status bar
+grep -n 'ERROR' static/app.js              # ERROR wording (not "FAULT")
+```
+
+If any of these come back empty, re-obtain the current package before doing any work —
+do not attempt to "add the missing features," they already exist upstream.
+
 ## Repo layout
 
 ```
