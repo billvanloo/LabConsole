@@ -269,7 +269,19 @@ def main():
 
         discovery.start(on_found)
 
-    app = web.Application(client_max_size=int(CFG.get("max_upload_mb", 200)) * 1024 * 1024)
+    @web.middleware
+    async def revalidate_static(request, handler):
+        # /static has no build step and no content hashes in its URLs, so without
+        # an explicit header browsers fall back to heuristic freshness (~10% of
+        # file age) and can serve a stale app.js for tens of minutes after an
+        # edit. "no-cache" still allows the 304 round-trip, just never a blind hit.
+        resp = await handler(request)
+        if request.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+    app = web.Application(client_max_size=int(CFG.get("max_upload_mb", 200)) * 1024 * 1024,
+                          middlewares=[revalidate_static])
     app.router.add_get("/", index)
     app.router.add_get("/docs", lambda r: web.HTTPFound("/static/docs/index.html"))
     app.router.add_get("/ws", ws_handler)
