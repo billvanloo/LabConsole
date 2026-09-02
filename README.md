@@ -28,8 +28,14 @@ bar). It contains:
 - **Technical Reference** - MQTT topics and commands, camera protocols,
   FTPS, discovery, WebSocket schema, HTTP API
 
-A printable copy is included at `static/docs/LabConsole-Manual.pdf`
-(regenerate with `python3 build_manual.py`).
+A printable copy is included at `static/docs/LabConsole-Manual.pdf`. It ships
+pre-built, so a normal install needs nothing extra. To regenerate it after a
+docs change:
+
+```bash
+pip3 install -r requirements-dev.txt --break-system-packages   # reportlab
+python3 build_manual.py
+```
 
 ## Printer prerequisites (short version)
 

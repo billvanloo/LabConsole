@@ -71,6 +71,10 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
     <p>The relay hub enforces <code>camera.max_streams</code> (default 1): a new viewer
        evicts the oldest active relay. The frame queue is depth-2 and drops old frames, so a
        slow client sees the latest image rather than building latency.</p>
+    <p>A chamber camera needs roughly three seconds to hand over its first frame, so the
+       hub keeps the newest frame per printer and replays it the instant a viewer connects,
+       then overwrites it from the live stream. The replay is skipped once that frame is
+       more than 30 seconds old, so the first image you see is never badly stale.</p>
 
     <h2 id="s3"><span class="idx">03</span> FTPS + DISCOVERY</h2>
     <p><b>FTPS</b> — implicit TLS on port <b>990</b>, user <code>bblp</code>. Used to list

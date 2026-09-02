@@ -410,6 +410,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     e += [P("The relay hub enforces camera.max_streams (default 1); a new viewer evicts the "
             "oldest. The frame queue is depth-2 and drops stale frames so slow clients see the "
             "latest image rather than building latency."),
+          P("A chamber camera needs roughly three seconds to hand over its first frame, so the "
+            "hub keeps the newest frame per printer and replays it the instant a viewer "
+            "connects, then overwrites it from the live stream. The replay is skipped once "
+            "that frame is more than 30 seconds old, so the first image is never badly stale."),
           Paragraph("03 \u00b7 FTPS + DISCOVERY", S["h2"]), rule(),
           P("<b>FTPS</b> \u2014 implicit TLS on port 990, user bblp. Lists .3mf/.gcode in the SD "
             "root (MLSD with NLST fallback) and uploads new files ahead of a project_file "

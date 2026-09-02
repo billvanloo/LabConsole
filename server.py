@@ -9,6 +9,7 @@ import json
 import pathlib
 import sys
 import threading
+import time
 
 from aiohttp import web, WSMsgType
 
@@ -128,6 +129,22 @@ class CamHub:
 HUB = CamHub(int(CFG.get("camera", {}).get("max_streams", 1)))
 BOUNDARY = "labconsoleframe"
 
+# Newest JPEG seen per printer. A chamber camera takes ~3s to hand over its first
+# frame (TLS setup plus a ~1 FPS source) and a panel only holds the camera face
+# for ~8s, so a viewer arriving on a camera turn spent most of it staring at
+# black. Replaying the last frame fills that gap instantly; the live stream
+# overwrites it as soon as it arrives. Only replayed while fresh — a stale image
+# must never sit under the LIVE tag. Costs one frame (~100KB) per printer.
+PREVIEW_TTL = 30.0
+_preview: dict[str, tuple[float, bytes]] = {}
+
+
+def _frame_part(frame: bytes) -> bytes:
+    return (b"--" + BOUNDARY.encode() + b"\r\n"
+            b"Content-Type: image/jpeg\r\n"
+            b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+            + frame + b"\r\n")
+
 
 async def cam_handler(request):
     p = PRINTERS.get(request.match_info["id"])
@@ -139,6 +156,11 @@ async def cam_handler(request):
         "Cache-Control": "no-store",
     })
     await resp.prepare(request)
+
+    # hand over the last known frame while the upstream relay warms up
+    cached = _preview.get(p.id)
+    if cached and time.monotonic() - cached[0] <= PREVIEW_TTL:
+        await resp.write(_frame_part(cached[1]))
 
     entry = HUB.open_slot()
     loop = asyncio.get_running_loop()
@@ -158,6 +180,7 @@ async def cam_handler(request):
             for frame in gen:
                 if entry["stop"]:
                     break
+                _preview[p.id] = (time.monotonic(), frame)
                 # drop frames if the client is slow; latest wins
                 loop.call_soon_threadsafe(_offer, queue, frame)
         except Exception:
@@ -171,11 +194,7 @@ async def cam_handler(request):
             frame = await queue.get()
             if frame is None or entry["stop"]:
                 break
-            await resp.write(
-                b"--" + BOUNDARY.encode() + b"\r\n"
-                b"Content-Type: image/jpeg\r\n"
-                b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
-                + frame + b"\r\n")
+            await resp.write(_frame_part(frame))
     except (ConnectionResetError, asyncio.CancelledError):
         pass
     finally:

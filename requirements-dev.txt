@@ -1,0 +1,10 @@
+# Maintainer-only dependencies. NOT needed to run Lab Console — a Pi or other
+# deployment host installs requirements.txt alone, and the PDF manual ships
+# pre-built in static/docs/.
+#
+# reportlab is used solely by build_manual.py to regenerate
+# static/docs/LabConsole-Manual.pdf after a docs content change.
+#
+#   pip install -r requirements-dev.txt --break-system-packages
+#
+reportlab>=4.0

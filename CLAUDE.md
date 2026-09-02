@@ -21,14 +21,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.3.0), then confirm all 23 files are present:
+Check `VERSION` at the repo root (should read 1.3.0), then confirm all 24 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (23 files):
+Expected file manifest (24 files):
 
 ```
 ./CLAUDE.md
@@ -42,6 +42,7 @@ Expected file manifest (23 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./requirements-dev.txt
 ./requirements.txt
 ./server.py
 ./static/app.js
@@ -96,6 +97,7 @@ stay light enough for a Pi 3.
 ```bash
 pip install -r requirements.txt --break-system-packages   # aiohttp, paho-mqtt
 # ffmpeg must also be on PATH for X1/H2D camera relay (apt install ffmpeg)
+# regenerating the PDF manual additionally needs: pip install -r requirements-dev.txt
 
 python3 server.py --demo          # simulated 3-printer fleet, no config needed — use this for dev
 python3 server.py config.json     # real fleet, requires filled-in config.json
@@ -133,7 +135,11 @@ asyncio.run(main())"
   use RTSPS on :322 (relayed through `ffmpeg` subprocess → MJPEG), A1/A1 Mini/P1 use a
   proprietary length-prefixed JPEG protocol on :6000. `CamHub` in `server.py` caps concurrent
   relays (`camera.max_streams`, default 1) and evicts the oldest on a new request — don't
-  remove this cap, it's what keeps a Pi 3 alive.
+  remove this cap, it's what keeps a Pi 3 alive. `server.py` also keeps the newest frame
+  per printer (`_preview`, `PREVIEW_TTL` = 30s) and replays it immediately on connect:
+  measured time-to-first-frame on a chamber camera is ~3s, against an ~8s panel face
+  window, so without it most of a camera turn rendered black. The TTL is the guard that
+  keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
 - **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990,
   matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
   printer. It's additive — `config.json` can also just hardcode an `ip` per printer.
@@ -185,7 +191,12 @@ mockup file first rather than editing `static/` directly, unless told otherwise.
 2. `build_manual.py` — generates `static/docs/LabConsole-Manual.pdf` via reportlab. Content is
    a print-friendly re-derivation of the same four sections (Overview, Operator Guide, Admin
    Guide, Technical Reference), with vector-drawn figures instead of the live canvas ones.
-   Regenerate after any docs content change: `python3 build_manual.py`.
+   Regenerate after any docs content change: `python3 build_manual.py`. reportlab is a
+   maintainer-only dependency and lives in `requirements-dev.txt`, deliberately kept out
+   of `requirements.txt` so deployment hosts don't install it — the PDF ships pre-built.
+   Regenerating rewrites the embedded creation date and document ID, so the file always
+   shows as changed even when the content is identical; check the diff is real before
+   committing it.
 3. `README.md` — intentionally short; points into `/docs` rather than duplicating it.
 
 If you change setup steps, config fields, protocols, or API shapes, update **admin.html /
