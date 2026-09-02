@@ -279,6 +279,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     ], [0.9 * inch, 5.5 * inch])
     e += [PanelFig(),
           Paragraph("FIG 2.1 \u2014 A PRINTING PANEL AND AN ERROR PANEL AS DRAWN ON THE CONSOLE.", S["cap"]),
+          P("When a job finishes, that panel \u2014 or its detail console, if open \u2014 "
+            "takes over for 45 seconds with a completion "
+            "sequence: the part is inspected on a turntable, meters cap out, a seal draws "
+            "itself and stamps FINISHED. Normal cycling resumes afterwards. A cancelled job "
+            "does not trigger it, and a fault always wins the panel."),
           Paragraph("03 \u00b7 CAMERA VIEWS", S["h2"]), rule(),
           P("One camera relay runs at a time; the dashboard\u2019s live slot rotates through the "
             "fleet, and opening a detail view pins that printer\u2019s camera. X1 Carbon / H2D "

@@ -1,0 +1,665 @@
+<title>Print Complete Celebrations</title>
+<style>
+  :root{
+    --bg:#070b18; --panel-deep:#060d1e;
+    --bezel:#141822; --bezel-edge:#232a38;
+    --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+    --amber:#ffc94d; --violet:#b06cff; --ok:#57e0b8;
+    --text-dim:#5f7ea6;
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg); color:var(--cyan); font-family:var(--mono);
+    padding:26px 20px 60px; line-height:1.55; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+
+  .eyebrow{font-size:10px;letter-spacing:.34em;color:var(--text-dim);text-transform:uppercase}
+  h1{font-size:20px;font-weight:600;letter-spacing:.16em;margin:8px 0 12px;
+     color:var(--cyan);text-shadow:0 0 12px rgba(63,216,255,.45);text-wrap:balance}
+  .lede{max-width:66ch;color:#9fc4e4;font-size:12.5px}
+  .lede b{color:var(--ok);font-weight:600}
+
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+  .cbadge{font-size:9.5px;letter-spacing:.2em;color:var(--text-dim);
+    border:1px solid #1c2a4a;border-radius:3px;padding:4px 9px}
+  .cbadge b{color:var(--cyan);font-weight:500}
+  .cbadge.warn{border-color:#3a2340;color:#c79fd6}
+  .cbadge.warn b{color:var(--violet)}
+
+  .refnote{margin:20px 0 8px;padding:12px 14px;border:1px solid #1c2a4a;border-radius:4px;
+    background:#0a1020;max-width:78ch}
+  .refnote h3{font-size:9.5px;letter-spacing:.24em;color:var(--amber);font-weight:600;margin-bottom:7px}
+  .refnote p{font-size:11.5px;color:#9fc4e4}
+  .refnote p+p{margin-top:7px}
+  .refnote b{color:var(--cyan);font-weight:500}
+
+  .swatches{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0 30px;align-items:center}
+  .sw{display:flex;align-items:center;gap:7px;font-size:9.5px;letter-spacing:.16em;color:var(--text-dim)}
+  .chip{width:11px;height:11px;border-radius:2px}
+  .sw.excluded .chip{background:repeating-linear-gradient(45deg,#3a1a12 0 3px,#1a1016 3px 6px);
+    border:1px solid #52251a}
+  .sw.excluded span{color:#8a6a62}
+
+  .opts{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));align-items:start}
+  .opt{display:flex;flex-direction:column}
+  .ohead{display:flex;align-items:baseline;gap:9px;margin-bottom:9px;flex-wrap:wrap}
+  .okey{font-size:10px;letter-spacing:.2em;color:var(--panel-deep);
+        background:var(--cyan);border-radius:2px;padding:2px 6px;font-weight:700}
+  .oname{font-size:13px;letter-spacing:.19em;color:var(--cyan)}
+  .oword{font-size:9.5px;letter-spacing:.2em;color:var(--text-dim);margin-left:auto}
+
+  .ppanel{position:relative;background:var(--bezel);border:1px solid var(--bezel-edge);
+    border-radius:14px;padding:8px}
+  .crt{position:relative;border-radius:9px;height:240px;overflow:hidden;
+    background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+    border:1px solid #0d1526;display:flex;flex-direction:column}
+  .crt::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+    mix-blend-mode:multiply;opacity:.5}
+  .phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+    font-size:10.5px;letter-spacing:.18em;position:relative;z-index:2;flex:0 0 auto}
+  .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto;
+    background:var(--ok);box-shadow:0 0 9px var(--ok)}
+  .pname{color:var(--cyan)}
+  .pmodel{margin-left:auto;color:var(--text-dim);font-size:9px}
+  .pbody{flex:1;position:relative}
+  .pbody canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .facechip{position:absolute;right:10px;bottom:8px;z-index:2;
+    font-size:9px;letter-spacing:.25em;color:var(--text-dim)}
+
+  .tl{margin-top:12px}
+  .tlbar{position:relative;height:4px;border-radius:2px;background:#141d33;overflow:hidden}
+  .tlfill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--cyan),var(--ok));
+    box-shadow:0 0 8px rgba(87,224,184,.5)}
+  .tlmarks{display:flex;margin-top:6px;font-size:8.5px;letter-spacing:.13em;color:var(--text-dim)}
+  .tlmarks span+span{margin-left:auto}
+
+  .desc{margin-top:12px;font-size:11.5px;color:#9fc4e4;min-height:96px}
+  .desc b{color:var(--cyan);font-weight:500}
+  .ref{margin-top:9px;font-size:10px;color:var(--text-dim);
+    border-left:2px solid #3a3320;padding-left:9px;min-height:44px}
+  .ref b{color:var(--amber);font-weight:500}
+
+  .replay{margin-top:14px;background:transparent;color:var(--cyan);cursor:pointer;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;
+    border:1px solid var(--cyan-dim);border-radius:3px;padding:7px 13px;width:100%}
+  .replay:hover{background:rgba(63,216,255,.08)}
+  .replay:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+  .notes{margin-top:44px;border-top:1px solid #14203d;padding-top:22px}
+  .notes h2{font-size:11px;letter-spacing:.26em;color:var(--text-dim);
+    font-weight:500;text-transform:uppercase;margin-bottom:14px}
+  .ngrid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .note{font-size:11.5px;color:#9fc4e4}
+  .note h3{font-size:10px;letter-spacing:.2em;color:var(--cyan);font-weight:600;margin-bottom:6px}
+  .note code{color:var(--amber);font-size:11px}
+  .note p+p{margin-top:8px}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Lab Console &middot; mockup for review &middot; rev 2, from ride references</p>
+  <h1>PRINT COMPLETE CELEBRATIONS</h1>
+  <p class="lede">
+    Three options for the flourish a panel shows when a job finishes. Each runs
+    <b>45 seconds</b>, then the panel returns to its normal face rotation. This revision is
+    rebuilt from your Galaxy's Edge photographs rather than from a general idea of the style.
+  </p>
+
+  <div class="refnote">
+    <h3>WHAT THE REFERENCES CHANGED</h3>
+    <p><b>The tally board is the authentic completion idiom.</b> Your third photo shows the
+      ride's own end-of-run panel: Aurebesh header, hexagonal emblem with a dot cluster, bold
+      label-and-value rows, and a boxed total. Option A is built directly on it.</p>
+    <p><b>Meters are tapered wedges, not blocks.</b> The readouts in your first photo ramp from
+      thin to thick with a green tick comb over the top and an amber end-cap &mdash; not the
+      rectangular segments I used in rev 1. Reticles are open arcs, not closed rings.</p>
+    <p><b>The radial histogram beats a generic burst.</b> Your second photo's polar chart
+      &mdash; filled wedges and thin spikes over a scanline-hatched disc &mdash; is now option B.</p>
+  </div>
+
+  <div class="constraints">
+    <span class="cbadge">DURATION <b>45s</b></span>
+    <span class="cbadge">TRIGGER <b>printing &rarr; idle</b></span>
+    <span class="cbadge">SCOPE <b>frontend only</b></span>
+    <span class="cbadge warn">HELD <b>no red / orange</b></span>
+  </div>
+
+  <div class="swatches">
+    <span class="sw"><i class="chip" style="background:#ffc94d;box-shadow:0 0 8px #ffc94d"></i><span>AMBER &middot; LEADS</span></span>
+    <span class="sw"><i class="chip" style="background:#57e0b8;box-shadow:0 0 8px #57e0b8"></i><span>MINT &middot; SUCCESS</span></span>
+    <span class="sw"><i class="chip" style="background:#3fd8ff;box-shadow:0 0 8px #3fd8ff"></i><span>CYAN &middot; STRUCTURE</span></span>
+    <span class="sw"><i class="chip" style="background:#b06cff;box-shadow:0 0 8px #b06cff"></i><span>VIOLET</span></span>
+    <span class="sw excluded"><i class="chip"></i><span>ORANGE &mdash; USED ON THE RIDE, HELD FOR ERRORS HERE</span></span>
+  </div>
+
+  <div class="opts">
+
+    <section class="opt">
+      <div class="ohead">
+        <span class="okey">A</span><span class="oname">TALLY BOARD</span>
+        <span class="oword">"COMPLETE"</span>
+      </div>
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp"></span><span class="pname">VAN LOO A1 MINI</span>
+          <span class="pmodel">A1 MINI</span></div>
+        <div class="pbody"><canvas data-anim="tally"></canvas></div>
+        <span class="facechip">COMPLETE</span>
+      </div></div>
+      <div class="tl">
+        <div class="tlbar"><i class="tlfill" data-fill="tally"></i></div>
+        <div class="tlmarks"><span>0s EMBLEM</span><span>3.4s TOTAL</span><span>45s</span></div>
+      </div>
+      <p class="desc">
+        The ride's own end-of-run board, rebuilt with print statistics. The hexagonal emblem
+        strokes itself, an Aurebesh header types in, then <b>LAYERS / RUNTIME / MATERIAL</b>
+        punch in one at a time with their values, and a boxed COMPLETE total lands last and
+        holds, breathing gently.
+      </p>
+      <p class="ref"><b>From photo 3</b> &mdash; emblem, header, label-and-value rows, boxed total,
+        heavy bloom on the type.</p>
+      <button class="replay" data-replay="tally">REPLAY SEQUENCE</button>
+    </section>
+
+    <section class="opt">
+      <div class="ohead">
+        <span class="okey">B</span><span class="oname">RADIAL RESOLVE</span>
+        <span class="oword">"PRINT COMPLETE"</span>
+      </div>
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp"></span><span class="pname">VAN LOO A1 MINI</span>
+          <span class="pmodel">A1 MINI</span></div>
+        <div class="pbody"><canvas data-anim="radial"></canvas></div>
+        <span class="facechip">COMPLETE</span>
+      </div></div>
+      <div class="tl">
+        <div class="tlbar"><i class="tlfill" data-fill="radial"></i></div>
+        <div class="tlmarks"><span>0s DISC</span><span>2.2s FULL</span><span>45s</span></div>
+      </div>
+      <p class="desc">
+        A polar readout filling to capacity. Scanline hatching floods the disc, then
+        <b>histogram wedges climb outward</b> sector by sector while thin spikes overshoot
+        past them, crossing sight-lines sweep through, and the rings snap to full brightness
+        as the last sector lands.
+      </p>
+      <p class="ref"><b>From photo 2</b> &mdash; hatched disc, polar wedges, radial spikes,
+        crossing lines, corner Aurebesh.</p>
+      <button class="replay" data-replay="radial">REPLAY SEQUENCE</button>
+    </section>
+
+    <section class="opt">
+      <div class="ohead">
+        <span class="okey">C</span><span class="oname">INSPECTION</span>
+        <span class="oword">"FINISHED"</span>
+      </div>
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp"></span><span class="pname">VAN LOO A1 MINI</span>
+          <span class="pmodel">A1 MINI</span></div>
+        <div class="pbody"><canvas data-anim="inspect"></canvas></div>
+        <span class="facechip">COMPLETE</span>
+      </div></div>
+      <div class="tl">
+        <div class="tlbar"><i class="tlfill" data-fill="inspect"></i></div>
+        <div class="tlmarks"><span>0s WEDGES</span><span>5s STAMP</span><span>45s</span></div>
+      </div>
+      <p class="desc">
+        The craft-readout layout, with your part where the ship goes. Three
+        <b>tapered wedge meters</b> ramp up under their tick combs, the part turns inside an
+        open-arc reticle, a ladder marker climbs the right edge, and FINISHED stamps across
+        once all three meters cap out.
+      </p>
+      <p class="ref"><b>From photo 1</b> &mdash; wedge meters with tick combs and amber end-caps,
+        open-arc reticle around a wireframe craft, dotted ladder with triangle marker.</p>
+      <button class="replay" data-replay="inspect">REPLAY SEQUENCE</button>
+    </section>
+
+  </div>
+
+  <div class="notes">
+    <h2>Implementation notes</h2>
+    <div class="ngrid">
+      <div class="note">
+        <h3>TRIGGER</h3>
+        <p>The frontend already sees every state change over the WebSocket, so completion is
+          detectable client-side: previous observed state <code>printing</code>, new state
+          <code>idle</code>. No backend change and no new field in <code>view()</code>.</p>
+        <p>Only fires when a previous state was actually observed, so a page load or reconnect
+          never triggers a false celebration.</p>
+      </div>
+      <div class="note">
+        <h3>PLACEMENT</h3>
+        <p>A new face in <code>panelFaceFor</code>, above the camera and resting faces for its
+          45 seconds &mdash; but still below <code>error</code>, so a fault always wins the panel.</p>
+        <p>Option A needs real job figures. <code>layer</code>, <code>total_layers</code> and
+          <code>file</code> already arrive in the payload; runtime and material would need
+          either a small addition to <code>view()</code> or dropping those two rows.</p>
+      </div>
+      <div class="note">
+        <h3>THE ORANGE QUESTION</h3>
+        <p>The references use orange and red heavily &mdash; video borders in photo 1, most of
+          the polar chart in photo 2. CLAUDE.md reserves them for faults, so all three options
+          push amber and mint instead.</p>
+        <p>That is the one place these deliberately diverge from the source. Worth deciding
+          explicitly: relaxing it would read as more faithful, at the cost of the error
+          signal's exclusivity.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var CY="#3fd8ff", AM="#ffc94d", VI="#b06cff", OK="#57e0b8", GRID="#1a3a8f", DIM="#5f7ea6";
+  var DURATION=45;
+  var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  function ease(t){ return 1-Math.pow(1-t,3); }
+  function step(t,hz){ return Math.floor(t*hz)/hz; }
+  function rnd(s){ var x=Math.sin(s*127.1)*43758.5453; return x-Math.floor(x); }
+
+  function backdrop(c,w,h){
+    c.clearRect(0,0,w,h);
+    c.strokeStyle=GRID; c.globalAlpha=.18; c.lineWidth=1;
+    var x,y;
+    for(x=(w*0.5)%26;x<w;x+=26){ c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke(); }
+    for(y=(h*0.5)%26;y<h;y+=26){ c.beginPath(); c.moveTo(0,y); c.lineTo(w,y); c.stroke(); }
+    c.globalAlpha=1;
+  }
+
+  /* the ride's type has heavy bloom - everything legible glows hard */
+  function bloom(c,txt,x,y,size,col,alpha,spacing,align,weight){
+    c.save();
+    c.globalAlpha=alpha;
+    c.font=(weight||"700")+" "+size+"px ui-monospace,'SF Mono',Consolas,monospace";
+    c.textBaseline="middle";
+    c.shadowColor=col; c.shadowBlur=size*0.95;
+    c.fillStyle=col;
+    var total=0,i;
+    if(spacing){
+      for(i=0;i<txt.length;i++) total+=c.measureText(txt[i]).width+spacing;
+      total-=spacing;
+    } else total=c.measureText(txt).width;
+    var sx = align==="left" ? x : (align==="right" ? x-total : x-total/2);
+    c.textAlign="left";
+    if(spacing){
+      for(i=0;i<txt.length;i++){ c.fillText(txt[i],sx,y); sx+=c.measureText(txt[i]).width+spacing; }
+    } else c.fillText(txt,sx,y);
+    c.restore();
+    return total;
+  }
+
+  /* Aurebesh-flavoured run, drawn as strokes so no font is needed */
+  function glyphRun(c,x,y,count,size,seed,col,alpha,align){
+    c.save();
+    c.strokeStyle=col; c.globalAlpha=alpha; c.lineWidth=1.3;
+    c.shadowColor=col; c.shadowBlur=6;
+    var gap=size*1.6, i, total=(count-1)*gap;
+    var sx = align==="left" ? x+size/2 : x-total/2;
+    for(i=0;i<count;i++){
+      var gx=sx+i*gap, s=size/2, k=Math.floor(rnd(seed+i*3.7)*6);
+      c.beginPath();
+      if(k===0){ c.moveTo(gx-s,y-s); c.lineTo(gx-s,y+s); c.lineTo(gx+s,y+s); }
+      else if(k===1){ c.rect(gx-s,y-s,s*2,s*1.25); }
+      else if(k===2){ c.moveTo(gx-s,y+s); c.lineTo(gx,y-s); c.lineTo(gx+s,y+s); }
+      else if(k===3){ c.moveTo(gx-s,y-s); c.lineTo(gx+s,y-s); c.moveTo(gx,y-s); c.lineTo(gx,y+s); }
+      else if(k===4){ c.moveTo(gx-s,y-s); c.lineTo(gx+s,y+s); c.moveTo(gx+s,y-s); c.lineTo(gx-s,y-s); }
+      else { c.moveTo(gx-s,y+s); c.lineTo(gx+s,y+s); c.moveTo(gx-s,y); c.lineTo(gx+s*0.4,y); }
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  /* tapered wedge meter with tick comb + amber end cap - straight from photo 1 */
+  function wedgeMeter(c,x,y,w,h,frac,col){
+    var fw=w*clamp(frac,0,1);
+    c.save();
+    /* wedge body: thin at left, full height at right */
+    c.beginPath();
+    c.moveTo(x,y+h*0.5-1);
+    c.lineTo(x+fw,y);
+    c.lineTo(x+fw,y+h);
+    c.lineTo(x,y+h*0.5+1);
+    c.closePath();
+    c.fillStyle=col; c.globalAlpha=0.5; c.fill();
+    c.globalAlpha=0.9; c.lineWidth=1; c.strokeStyle=col; c.stroke();
+    /* tick comb over the whole track */
+    c.globalAlpha=0.85; c.strokeStyle=OK; c.lineWidth=1;
+    var n=11,i;
+    for(i=0;i<n;i++){
+      var px=x+(i/(n-1))*w;
+      var hh=h*(0.28+ (i/(n-1))*0.72);
+      c.beginPath(); c.moveTo(px, y+h*0.5-hh/2); c.lineTo(px, y+h*0.5+hh/2); c.stroke();
+    }
+    /* amber end cap at the fill point */
+    if(frac>0.01){
+      c.globalAlpha=1; c.strokeStyle=AM; c.lineWidth=2;
+      c.shadowColor=AM; c.shadowBlur=8;
+      c.beginPath(); c.moveTo(x+fw, y-2); c.lineTo(x+fw, y+h+2); c.stroke();
+    }
+    c.restore();
+  }
+
+  /* open-arc reticle: arcs top and bottom, gaps at the sides - photo 1 */
+  function openReticle(c,cx,cy,r,col,alpha,rot){
+    c.save();
+    c.strokeStyle=col; c.globalAlpha=alpha; c.lineWidth=1.4;
+    c.shadowColor=col; c.shadowBlur=7;
+    var span=Math.PI*0.62;
+    c.beginPath(); c.arc(cx,cy,r,-Math.PI/2-span/2+rot,-Math.PI/2+span/2+rot); c.stroke();
+    c.beginPath(); c.arc(cx,cy,r, Math.PI/2-span/2+rot, Math.PI/2+span/2+rot); c.stroke();
+    c.globalAlpha=alpha*0.6; c.lineWidth=1;
+    c.beginPath(); c.arc(cx,cy,r*0.72,-Math.PI/2-span*0.35+rot,-Math.PI/2+span*0.35+rot); c.stroke();
+    c.beginPath(); c.arc(cx,cy,r*0.72, Math.PI/2-span*0.35+rot, Math.PI/2+span*0.35+rot); c.stroke();
+    c.restore();
+  }
+
+  /* dotted ladder with triangle marker - right edge of photo 1 */
+  function ladder(c,x,y,h,frac,col){
+    c.save();
+    var n=14,i;
+    for(i=0;i<n;i++){
+      var py=y+h-(i/(n-1))*h;
+      var on=(i/(n-1))<=frac+1e-6;
+      c.globalAlpha=on?0.95:0.2;
+      c.fillStyle=on?col:GRID;
+      c.fillRect(x-3, py-1.5, 6, 3);
+    }
+    var my=y+h-frac*h;
+    c.globalAlpha=1; c.fillStyle=AM; c.shadowColor=AM; c.shadowBlur=7;
+    c.beginPath(); c.moveTo(x-11,my); c.lineTo(x-6,my-3.5); c.lineTo(x-6,my+3.5); c.closePath(); c.fill();
+    c.restore();
+  }
+
+  function hexPath(c,cx,cy,r,rot){
+    var i;
+    c.beginPath();
+    for(i=0;i<6;i++){
+      var a=(i/6)*Math.PI*2 - Math.PI/2 + (rot||0);
+      var x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+      if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
+    }
+    c.closePath();
+  }
+
+  /* ========================= A - TALLY BOARD ============================ */
+  function Tally(){
+    var ROWS=[
+      {k:"LAYERS",   v:"1284"},
+      {k:"RUNTIME",  v:"48:12"},
+      {k:"MATERIAL", v:"18.4M"}
+    ];
+    return { draw:function(c,w,h,t){
+      backdrop(c,w,h);
+      var left=w*0.13;
+
+      /* hexagonal emblem strokes itself, then a dot cluster lands inside */
+      var ep=clamp(step(t,20)/0.7,0,1);
+      var ex=left+9, ey=h*0.17, er=Math.min(13, w*0.045);
+      c.save();
+      c.strokeStyle=OK; c.globalAlpha=ep; c.lineWidth=1.6;
+      c.shadowColor=OK; c.shadowBlur=9;
+      c.setLineDash([er*2.2, er*2.2]);
+      c.lineDashOffset=(1-ep)*er*6;
+      hexPath(c,ex,ey,er,0); c.stroke();
+      c.restore();
+      if(t>0.7){
+        var dp=clamp((t-0.7)/0.3,0,1);
+        c.save(); c.fillStyle=OK; c.globalAlpha=dp; c.shadowColor=OK; c.shadowBlur=7;
+        [[0,-1],[1,0],[0,1],[-1,0]].forEach(function(d){
+          c.beginPath(); c.arc(ex+d[0]*er*0.42, ey+d[1]*er*0.42, 1.9, 0, 7); c.fill();
+        });
+        c.restore();
+      }
+
+      /* Aurebesh header types in beside the emblem */
+      var gp=clamp((t-0.45)/0.7,0,1);
+      glyphRun(c, ex+er+10, ey, Math.max(1,Math.round(gp*8)), 6, 11, CY, gp*0.8, "left");
+
+      /* rows punch in one at a time */
+      var rowTop=h*0.36, rowGap=Math.min(26,(h*0.42)/ROWS.length);
+      ROWS.forEach(function(r,i){
+        var t0=1.25+i*0.55;
+        var p=clamp(step(t-t0,24)/0.28,0,1);
+        if(p<=0) return;
+        var y=rowTop+i*rowGap;
+        var sc=lerp(1.35,1,ease(p));
+        var fs=Math.max(11,Math.min(15,w*0.052))*sc;
+        bloom(c, r.k, left, y, fs, AM, p, 1.2, "left");
+        bloom(c, r.v, w-left*0.75, y, fs, OK, p, 1.2, "right");
+      });
+
+      /* boxed total lands last and holds, breathing */
+      var bt=1.25+ROWS.length*0.55+0.5;
+      if(t>bt){
+        var bp=clamp(step(t-bt,24)/0.34,0,1);
+        var by=h*0.855, bh=Math.max(24,h*0.15);
+        var bw=Math.min(w*0.68,210)*lerp(1.3,1,ease(bp));
+        var bx=w/2-bw/2;
+        var breathe=1+Math.sin(t*1.7)*0.05;
+        c.save();
+        c.globalAlpha=bp*(0.85+breathe*0.15);
+        c.strokeStyle=OK; c.lineWidth=1.8; c.shadowColor=OK; c.shadowBlur=12;
+        c.beginPath();
+        if(c.roundRect) c.roundRect(bx,by-bh/2,bw,bh,5);
+        else c.rect(bx,by-bh/2,bw,bh);
+        c.stroke(); c.restore();
+        bloom(c,"COMPLETE",w/2,by,Math.max(13,Math.min(18,w*0.066))*lerp(1.3,1,ease(bp)),OK,bp,4.5);
+      }
+    }};
+  }
+
+  /* ========================= B - RADIAL RESOLVE ========================= */
+  function Radial(){
+    var SECT=22;
+    var mags=[], spikes=[], i;
+    for(i=0;i<SECT;i++) mags.push(0.34+rnd(i*5.1)*0.62);
+    for(i=0;i<46;i++) spikes.push({a:rnd(i*2.7)*Math.PI*2, m:0.45+rnd(i*9.3)*0.72, c:rnd(i*4.4)>0.55?AM:OK});
+
+    return { draw:function(c,w,h,t){
+      backdrop(c,w,h);
+      var cx=w/2, cy=h*0.48, R=Math.min(w,h)*0.40;
+
+      /* hatched disc floods in */
+      var hp=clamp(t/0.7,0,1);
+      c.save();
+      c.beginPath(); c.arc(cx,cy,R*hp,0,7); c.clip();
+      c.strokeStyle=CY; c.globalAlpha=0.16; c.lineWidth=1;
+      for(var y=cy-R;y<cy+R;y+=3){ c.beginPath(); c.moveTo(cx-R,y); c.lineTo(cx+R,y); c.stroke(); }
+      c.restore();
+
+      /* polar histogram wedges climb outward, sector by sector */
+      c.save();
+      for(i=0;i<SECT;i++){
+        var st=0.35+i*0.055;
+        var p=clamp(step(t-st,20)/0.5,0,1);
+        if(p<=0) continue;
+        var a0=(i/SECT)*Math.PI*2, a1=a0+(Math.PI*2/SECT)*0.72;
+        var rr=R*mags[i]*ease(p);
+        c.beginPath();
+        c.moveTo(cx,cy);
+        c.arc(cx,cy,rr,a0,a1);
+        c.closePath();
+        c.fillStyle=(i%3===0)?AM:OK;
+        c.globalAlpha=0.30;
+        c.fill();
+        c.globalAlpha=0.85; c.lineWidth=1; c.strokeStyle=(i%3===0)?AM:OK;
+        c.stroke();
+      }
+      c.restore();
+
+      /* thin spikes overshoot past the wedges */
+      c.save();
+      spikes.forEach(function(s,k){
+        var st=0.6+k*0.022;
+        var p=clamp(step(t-st,22)/0.4,0,1);
+        if(p<=0) return;
+        var r2=R*s.m*ease(p);
+        c.globalAlpha=0.8; c.strokeStyle=s.c; c.lineWidth=1.2;
+        c.beginPath();
+        c.moveTo(cx+Math.cos(s.a)*R*0.16, cy+Math.sin(s.a)*R*0.16);
+        c.lineTo(cx+Math.cos(s.a)*r2, cy+Math.sin(s.a)*r2);
+        c.stroke();
+      });
+      c.restore();
+
+      /* crossing sight-lines sweep through */
+      c.save();
+      c.strokeStyle=CY; c.lineWidth=1.3; c.shadowColor=CY; c.shadowBlur=6;
+      for(i=0;i<3;i++){
+        var a=step(t,16)*0.06 + i*(Math.PI/3);
+        c.globalAlpha=0.55;
+        c.beginPath();
+        c.moveTo(cx-Math.cos(a)*R*1.32, cy-Math.sin(a)*R*1.32);
+        c.lineTo(cx+Math.cos(a)*R*1.32, cy+Math.sin(a)*R*1.32);
+        c.stroke();
+      }
+      c.restore();
+
+      /* rings snap to full brightness as the last sector lands */
+      var full=t>0.35+SECT*0.055+0.5;
+      c.save();
+      c.strokeStyle=CY; c.shadowColor=CY; c.shadowBlur=full?14:5;
+      [1,0.62,0.3].forEach(function(k,ri){
+        c.globalAlpha=full?(ri===0?0.95:0.6):0.4;
+        c.lineWidth=ri===0?2.2:1.2;
+        c.beginPath(); c.arc(cx,cy,R*k,0,7); c.stroke();
+      });
+      c.restore();
+
+      if(full){
+        var fp=clamp((t-(0.35+SECT*0.055+0.5))/0.4,0,1);
+        c.save();
+        c.globalAlpha=fp*0.55;
+        c.fillStyle="rgba(6,13,30,0.82)";
+        c.fillRect(0,cy-13,w,26);
+        c.restore();
+        bloom(c,"PRINT COMPLETE",cx,cy,Math.max(12,Math.min(17,w*0.062)),OK,fp,3);
+      }
+      glyphRun(c, w-42, h-13, 6, 5.5, 23, AM, 0.6);
+      glyphRun(c, 42, h-13, 5, 5.5, 71, AM, 0.6);
+    }};
+  }
+
+  /* ========================= C - INSPECTION ============================= */
+  function Inspect(){
+    var METERS=[{k:"EXTR",m:0.92},{k:"BED",m:0.78},{k:"SURF",m:0.99}];
+    function verts(th,R,H){
+      var o=[],i,a,x,z;
+      for(i=0;i<6;i++){ a=i/6*Math.PI*2; x=Math.cos(a)*R; z=Math.sin(a)*R;
+        o.push([x*Math.cos(th)-z*Math.sin(th),-H/2,x*Math.sin(th)+z*Math.cos(th)]); }
+      for(i=0;i<6;i++){ a=i/6*Math.PI*2; x=Math.cos(a)*R; z=Math.sin(a)*R;
+        o.push([x*Math.cos(th)-z*Math.sin(th), H/2,x*Math.sin(th)+z*Math.cos(th)]); }
+      return o;
+    }
+    function proj(v,cx,cy){ var f=250,s=f/(f+v[2]); return [cx+v[0]*s, cy+v[1]*s*0.86]; }
+
+    return { draw:function(c,w,h,t){
+      backdrop(c,w,h);
+      var mx=w*0.06, mw=w*0.40, top=h*0.16, gap=Math.min(30,(h*0.62)/3);
+
+      /* three tapered wedge meters ramp up */
+      var caps=0;
+      METERS.forEach(function(m,i){
+        var t0=0.3+i*0.75;
+        var p=clamp(step(t-t0,18)/1.1,0,1)*m.m;
+        if(p>=m.m-1e-3) caps++;
+        var y=top+i*gap;
+        bloom(c, m.k, mx, y-11, 8, CY, clamp((t-t0)/0.2,0,1)*0.9, 1.3, "left");
+        wedgeMeter(c, mx, y-4, mw, 15, p/m.m*m.m, CY);
+        bloom(c, String(Math.round(p*100)).padStart(4,"0"), mx, y+20, 8, CY,
+              clamp((t-t0)/0.3,0,1)*0.75, 1.2, "left");
+      });
+
+      /* open-arc reticle with the part turning inside */
+      var rx=w*0.74, ry=h*0.46, rr=Math.min(w,h)*0.21;
+      openReticle(c,rx,ry,rr,CY,0.85,Math.sin(t*0.35)*0.12);
+      var R=rr*0.52, H=R*1.0, th=t*0.5;
+      var v=verts(th,R,H).map(function(p){ return proj(p,rx,ry); });
+      c.save();
+      c.strokeStyle=OK; c.globalAlpha=0.9; c.lineWidth=1.2;
+      c.shadowColor=OK; c.shadowBlur=6;
+      function edge(i,j){ c.beginPath(); c.moveTo(v[i][0],v[i][1]); c.lineTo(v[j][0],v[j][1]); c.stroke(); }
+      var i;
+      for(i=0;i<6;i++) edge(i,(i+1)%6);
+      for(i=0;i<6;i++) edge(6+i,6+(i+1)%6);
+      for(i=0;i<6;i++) edge(i,6+i);
+      c.restore();
+
+      /* bracket pair with amber triangles, flanking the reticle */
+      c.save();
+      c.strokeStyle=OK; c.globalAlpha=0.8; c.lineWidth=1.5;
+      [-1,1].forEach(function(s){
+        var bxp=rx+s*rr*1.42;
+        c.beginPath();
+        c.moveTo(bxp-s*5, ry-rr*0.42); c.lineTo(bxp, ry-rr*0.42);
+        c.lineTo(bxp, ry+rr*0.42); c.lineTo(bxp-s*5, ry+rr*0.42);
+        c.stroke();
+      });
+      c.fillStyle=AM; c.shadowColor=AM; c.shadowBlur=6;
+      c.beginPath(); c.moveTo(rx-rr*1.30,ry); c.lineTo(rx-rr*1.44,ry-4); c.lineTo(rx-rr*1.44,ry+4); c.closePath(); c.fill();
+      c.restore();
+
+      /* ladder climbs the right edge */
+      ladder(c, w-13, h*0.20, h*0.56, clamp(t/3.2,0,1), OK);
+
+      /* FINISHED stamps once all three meters cap out */
+      if(caps===3){
+        var st=clamp(step(t-2.6,24)/0.4,0,1);
+        var sc=lerp(1.5,1,ease(st));
+        c.save();
+        c.globalAlpha=st*0.8; c.fillStyle="rgba(6,13,30,0.86)";
+        c.fillRect(0,h*0.80-15,w,30); c.restore();
+        bloom(c,"FINISHED",w/2,h*0.80,Math.max(13,Math.min(18,w*0.066))*sc,OK,st,4.5);
+      }
+      glyphRun(c, w*0.30, h-11, 6, 5.5, 55, AM, 0.55);
+    }};
+  }
+
+  /* ============================ runner ================================== */
+  var FACTORY={ tally:Tally, radial:Radial, inspect:Inspect };
+
+  function mount(cv){
+    var key=cv.dataset.anim;
+    var fill=document.querySelector('[data-fill="'+key+'"]');
+    var anim=FACTORY[key]();
+    var raf=null,t0=null,dims=null;
+    function sizeUp(){
+      var r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+      if(!dims||dims.w!==r.width||dims.h!==r.height){
+        cv.width=Math.max(1,Math.round(r.width*dpr));
+        cv.height=Math.max(1,Math.round(r.height*dpr));
+        dims={w:r.width,h:r.height,c:cv.getContext("2d")};
+      }
+      dims.c.setTransform(dpr,0,0,dpr,0,0);
+      return dims;
+    }
+    function frame(now){
+      if(!cv.isConnected){ raf=null; return; }
+      if(t0===null) t0=now;
+      var t=(now-t0)/1000, d=sizeUp();
+      anim.draw(d.c,d.w,d.h,Math.min(t,DURATION));
+      if(fill) fill.style.width=(clamp(t/DURATION,0,1)*100)+"%";
+      raf = t<DURATION ? requestAnimationFrame(frame) : null;
+    }
+    function start(){
+      if(raf) cancelAnimationFrame(raf);
+      anim=FACTORY[key](); t0=null;
+      if(reduced){ var d=sizeUp(); anim.draw(d.c,d.w,d.h,8);
+        if(fill) fill.style.width="100%"; return; }
+      raf=requestAnimationFrame(frame);
+    }
+    start();
+    return start;
+  }
+
+  var starters={};
+  Array.prototype.forEach.call(document.querySelectorAll("canvas[data-anim]"),function(cv){
+    starters[cv.dataset.anim]=mount(cv);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-replay]"),function(b){
+    b.addEventListener("click",function(){ var s=starters[b.dataset.replay]; if(s) s(); });
+  });
+})();
+</script>

@@ -21,14 +21,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.3.0), then confirm all 24 files are present:
+Check `VERSION` at the repo root (should read 1.3.0), then confirm all 25 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (24 files):
+Expected file manifest (25 files):
 
 ```
 ./CLAUDE.md
@@ -42,6 +42,7 @@ Expected file manifest (24 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
 ./server.py
@@ -85,6 +86,8 @@ static/
 build_manual.py         generates static/docs/LabConsole-Manual.pdf (reportlab)
 config.example.json     copy to config.json and fill in real printer serials/access codes
 lab-console.service     systemd unit for boot-time start
+mockups/                standalone HTML mockups from the approval loop below — kept after
+                          porting, as the reference for what was agreed
 README.md               short quick-start; full docs live in static/docs/ (served at /docs)
 ```
 
@@ -148,11 +151,23 @@ asyncio.run(main())"
   `server.py` treats real and simulated printers identically. If you add a method to
   `BambuPrinter`, add the matching one to `DemoPrinter` or demo mode will throw on that action.
 - **Frontend has no framework and no build step.** `static/app.js` owns: WebSocket
-  connect/reconnect, panel face-cycling (status / resting-animation / camera, ~8s rotation),
+  connect/reconnect, panel face-cycling (status / resting-animation / camera / print-complete,
+  ~8s rotation),
   the canvas-drawn vector instruments (radar/orbit/scan), the detail view, and the two modals
   (stop-confirm, start-print). Canvas animation loops self-terminate via `cv.isConnected`
   checks — when adding a new animated face, follow that pattern or it'll leak loops on
   hidden/removed panels.
+- **The print-complete face** (`complete()` in `app.js`, ported from
+  `mockups/print-complete-celebration.html`) runs 45s on a `printing -> idle` transition where
+  the last printing push was >= 90%. The percent gate is what stops a cancelled job
+  celebrating, and it reads the *previous* push because `percent` goes null once idle. The face
+  sits above camera and resting but below error/offline. Two load-bearing details: its canvas
+  timing is anchored to `data-t0`, not to mount, so a remount resumes in place; and
+  `renderFleet`'s re-render guard excludes `complete` (as it does `cam`) so the 8s cycle can't
+  restart it mid-run. The detail view runs it too, replacing the camera block: `renderDetail`
+  only rebuilds on `full`, so `detailCeleb` forces a rebuild when the flourish starts *and*
+  when it ends, and because the detail view has no 8s tick the hand-back is an explicit
+  `celebTimer` (cleared in `closeDetail`).
 
 ## Design language (read before touching CSS/HTML)
 
@@ -160,7 +175,10 @@ Established through several rounds of mockup approval — don't drift from these
 mockup round:
 
 - **Color meaning is fixed**: cyan = normal/idle, amber = active/printing, violet = paused,
-  **red/orange = error only**. The camera "LIVE" indicator is deliberately **white**, not red
+  mint (`--ok`) = success/completion, **red/orange = error only**. The Galaxy's Edge panels
+  the console is modelled on use orange freely; here it is held back for faults, so the
+  print-complete sequence leads with mint and amber instead. Don't relax that without a
+  decision — it's what makes an error readable from across the room. The camera "LIVE" indicator is deliberately **white**, not red
   — this was a specific fix (see git history / conversation) to stop it reading as an alarm.
 - **Error state gets two signals**: the corner lamp blinks red AND the entire panel bezel
   flashes red border + glow, in sync (`@keyframes bezelflash`, `.ppanel.error`). Both, always.
@@ -183,6 +201,14 @@ change (new screen, new state, restyle) gets a standalone HTML mockup for review
 being applied to the real `static/` files. Backend-only changes don't need this. If asked to
 change how something looks or behaves visually, default to producing a small self-contained
 mockup file first rather than editing `static/` directly, unless told otherwise.
+
+Mockups live in `mockups/` and are **kept after porting**, not deleted — they are the record of
+what was approved, and they run standalone so a later session can see the intended motion
+without reconstructing it from `app.js`. `mockups/print-complete-celebration.html` holds all
+three print-complete proposals; option C (INSPECTION) is the one that shipped. The visual
+vocabulary there — tapered wedge meters, open-arc reticles, stepped rather than eased motion —
+came from the owner's own Galaxy's Edge reference photographs, so prefer it over inventing a
+new treatment.
 
 ## Documentation surfaces (keep these three in sync)
 

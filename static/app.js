@@ -2,7 +2,9 @@
 "use strict";
 
 const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
+const OK = "#57e0b8";   // --ok, the palette's success hue; alert red stays fault-only
 const CYCLE_MS = 8000;
+const CELEBRATE_MS = 45000;
 const REST_KINDS = ["orbit", "radar", "scan"];
 
 let fleet = [];            // latest printer views from the server
@@ -10,6 +12,8 @@ let ws = null, wsUp = false;
 let camHolder = 0, tick = 0;
 let currentView = { name: "fleet", id: null }; // or {name:"detail", id}
 let pendingModal = null;
+const celebrateUntil = new Map();  // printer id -> ms timestamp the flourish ends
+const prevSeen = new Map();        // printer id -> {state, percent} from the last push
 
 /* ================= websocket ================= */
 function connect() {
@@ -21,12 +25,26 @@ function connect() {
     const msg = JSON.parse(ev.data);
     if (msg.type === "fleet") {
       fleet = msg.printers;
+      noteCompletions();
       document.getElementById("demobadge").classList.toggle("hidden", !msg.demo);
       onFleetUpdate();
     }
     else if (msg.type === "error") toast(msg.detail, true);
   };
 }
+// A finished job is a printing -> idle transition. Requires a previously observed
+// state, so a page load or reconnect never fires a stale celebration, and requires
+// the job to have been near the end, so a cancelled print doesn't celebrate.
+function noteCompletions() {
+  fleet.forEach(p => {
+    const was = prevSeen.get(p.id);
+    if (was && was.state === "printing" && p.state === "idle" && (was.percent ?? 0) >= 90)
+      celebrateUntil.set(p.id, Date.now() + CELEBRATE_MS);
+    prevSeen.set(p.id, { state: p.state, percent: p.percent });
+  });
+}
+const celebrating = id => (celebrateUntil.get(id) || 0) > Date.now();
+
 function send(cmd) {
   if (!wsUp) { toast("LINK DOWN — COMMAND NOT SENT", true); return; }
   ws.send(JSON.stringify(cmd));
@@ -126,9 +144,208 @@ function camDemo(cv) {
     t += .03;
   });
 }
+/* ---------- print-complete instrument ----------
+   Ported from mockups/print-complete-celebration.html (option C, INSPECTION).
+   Vocabulary comes from the Galaxy's Edge panel references: tapered wedge meters
+   under a tick comb with an amber end cap, an open-arc reticle (arcs top and
+   bottom, gaps at the sides) around the part, a dotted ladder with a triangle
+   marker, and a hexagonal seal that draws itself. Amber and mint lead; AL is
+   never used here — red means a fault and nothing else. */
+const MET = [["EXTR", .92], ["BED", .78], ["SURF", .99]];
+const cEase = t => 1 - Math.pow(1 - t, 3);
+const cStep = (t, hz) => Math.floor(t * hz) / hz;   // prop panels move in steps
+const cClamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const cRnd = s => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+function cText(c, txt, x, y, size, col, alpha, sp, align) {
+  c.save();
+  c.globalAlpha = alpha; c.fillStyle = col;
+  c.font = `700 ${size}px ui-monospace,'SF Mono',Consolas,monospace`;
+  c.textBaseline = "middle"; c.textAlign = "left";
+  c.shadowColor = col; c.shadowBlur = size * .9;
+  let total = -sp;
+  for (const ch of txt) total += c.measureText(ch).width + sp;
+  let sx = align === "right" ? x - total : align === "left" ? x : x - total / 2;
+  for (const ch of txt) { c.fillText(ch, sx, y); sx += c.measureText(ch).width + sp; }
+  c.restore();
+}
+function cGlyphs(c, x, y, n, size, seed, col, alpha) {
+  c.save();
+  c.strokeStyle = col; c.globalAlpha = alpha; c.lineWidth = 1.2;
+  const gap = size * 1.6, total = (n - 1) * gap;
+  for (let i = 0; i < n; i++) {
+    const gx = x - total / 2 + i * gap, s = size / 2, k = Math.floor(cRnd(seed + i * 3.7) * 6);
+    c.beginPath();
+    if (k === 0) { c.moveTo(gx - s, y - s); c.lineTo(gx - s, y + s); c.lineTo(gx + s, y + s); }
+    else if (k === 1) { c.rect(gx - s, y - s, s * 2, s * 1.25); }
+    else if (k === 2) { c.moveTo(gx - s, y + s); c.lineTo(gx, y - s); c.lineTo(gx + s, y + s); }
+    else if (k === 3) { c.moveTo(gx - s, y - s); c.lineTo(gx + s, y - s); c.moveTo(gx, y - s); c.lineTo(gx, y + s); }
+    else if (k === 4) { c.moveTo(gx - s, y - s); c.lineTo(gx + s, y + s); c.moveTo(gx + s, y - s); c.lineTo(gx - s, y - s); }
+    else { c.moveTo(gx - s, y + s); c.lineTo(gx + s, y + s); c.moveTo(gx - s, y); c.lineTo(gx + s * .4, y); }
+    c.stroke();
+  }
+  c.restore();
+}
+function cWedge(c, x, y, w, h, frac, col) {
+  const fw = w * cClamp(frac, 0, 1);
+  c.save();
+  c.beginPath();
+  c.moveTo(x, y + h / 2 - 1); c.lineTo(x + fw, y);
+  c.lineTo(x + fw, y + h); c.lineTo(x, y + h / 2 + 1); c.closePath();
+  c.fillStyle = col; c.globalAlpha = .42; c.fill();
+  c.globalAlpha = .9; c.lineWidth = 1; c.strokeStyle = col; c.stroke();
+  c.globalAlpha = .75; c.strokeStyle = OK;
+  for (let i = 0; i < 9; i++) {                       // tick comb over the full track
+    const px = x + (i / 8) * w, hh = h * (.3 + (i / 8) * .7);
+    c.beginPath(); c.moveTo(px, y + h / 2 - hh / 2); c.lineTo(px, y + h / 2 + hh / 2); c.stroke();
+  }
+  if (frac > .01) {                                   // amber end cap at the fill point
+    c.globalAlpha = 1; c.strokeStyle = AM; c.lineWidth = 2;
+    c.shadowColor = AM; c.shadowBlur = 7;
+    c.beginPath(); c.moveTo(x + fw, y - 2); c.lineTo(x + fw, y + h + 2); c.stroke();
+  }
+  c.restore();
+}
+function cReticle(c, cx, cy, r, alpha, rot) {
+  c.save();
+  c.strokeStyle = CY; c.globalAlpha = alpha; c.lineWidth = 1.4;
+  c.shadowColor = CY; c.shadowBlur = 6;
+  const span = Math.PI * .62;
+  for (const base of [-Math.PI / 2, Math.PI / 2]) {
+    c.beginPath(); c.arc(cx, cy, r, base - span / 2 + rot, base + span / 2 + rot); c.stroke();
+  }
+  c.globalAlpha = alpha * .6; c.lineWidth = 1;
+  for (const base of [-Math.PI / 2, Math.PI / 2]) {
+    c.beginPath(); c.arc(cx, cy, r * .72, base - span * .35 + rot, base + span * .35 + rot); c.stroke();
+  }
+  c.restore();
+}
+function cLadder(c, x, y, h, frac) {
+  c.save();
+  for (let i = 0; i < 12; i++) {
+    const py = y + h - (i / 11) * h, on = (i / 11) <= frac + 1e-6;
+    c.globalAlpha = on ? .95 : .2; c.fillStyle = on ? OK : GR;
+    c.fillRect(x - 3, py - 1.5, 6, 3);
+  }
+  const my = y + h - frac * h;
+  c.globalAlpha = 1; c.fillStyle = AM; c.shadowColor = AM; c.shadowBlur = 6;
+  c.beginPath(); c.moveTo(x - 10, my); c.lineTo(x - 6, my - 3.5); c.lineTo(x - 6, my + 3.5);
+  c.closePath(); c.fill();
+  c.restore();
+}
+function complete(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  // anchored to the celebration start, not to mount, so a remount resumes in place
+  const t0 = +cv.dataset.t0 || Date.now();
+  const mx = w * .05, mw = w * .32;
+  const rx = w * .70, ry = h * .44, rr = Math.min(w, h) * .30;
+  const pr = rr * .5, ph = pr;
+
+  const part = theta => {
+    const out = [];
+    for (let s = 0; s < 2; s++)
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2, px = Math.cos(a) * pr, pz = Math.sin(a) * pr;
+        const vx = px * Math.cos(theta) - pz * Math.sin(theta);
+        const vz = px * Math.sin(theta) + pz * Math.cos(theta);
+        const f = 250 / (250 + vz);
+        out.push([rx + vx * f, ry + (s ? ph / 2 : -ph / 2) * f * .86]);
+      }
+    return out;
+  };
+
+  loop(cv, () => {
+    const t = (Date.now() - t0) / 1000;
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = GR; c.globalAlpha = .16; c.lineWidth = 1;
+    for (let x = (w * .5) % 24; x < w; x += 24) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+    for (let y = (h * .5) % 24; y < h; y += 24) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
+    c.globalAlpha = 1;
+
+    let capped = 0;
+    MET.forEach((m, i) => {
+      const st = .3 + i * .7;
+      const p = cClamp(cStep(t - st, 18) / 1.1, 0, 1) * m[1];
+      if (p >= m[1] - 1e-3) capped++;
+      const y = h * (.20 + i * .26), al = cClamp((t - st) / .2, 0, 1);
+      cText(c, m[0], mx, y - h * .085, 7.5, CY, al * .9, 1.2, "left");
+      cWedge(c, mx, y - 5, mw, 11, p, CY);
+    });
+
+    cReticle(c, rx, ry, rr, .85, Math.sin(t * .35) * .12);
+
+    const v = part(t * .5);
+    const sweepOn = t > .9 && t < 4.2;
+    const sweepY = ry + ph * .8 - cClamp((t - .9) / 3, 0, 1) * ph * 1.9;
+    const edge = (i, j) => {
+      const a = v[i], b = v[j];
+      const near = sweepOn && Math.abs((a[1] + b[1]) / 2 - sweepY) < 7;
+      c.strokeStyle = near ? OK : CY; c.globalAlpha = near ? 1 : .8;
+      c.lineWidth = near ? 1.7 : 1.1;
+      c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    };
+    for (let i = 0; i < 6; i++) edge(i, (i + 1) % 6);
+    for (let i = 0; i < 6; i++) edge(6 + i, 6 + (i + 1) % 6);
+    for (let i = 0; i < 6; i++) edge(i, 6 + i);
+    c.globalAlpha = 1;
+
+    if (sweepOn) {
+      c.save();
+      c.strokeStyle = OK; c.globalAlpha = .9; c.lineWidth = 1.3;
+      c.shadowColor = OK; c.shadowBlur = 10;
+      c.beginPath(); c.moveTo(rx - rr, sweepY); c.lineTo(rx + rr, sweepY); c.stroke();
+      c.restore();
+    }
+
+    if (t > 3.6) {                                    // segmented rings converge and lock
+      const e = cEase(cClamp((t - 3.6) / 2.2, 0, 1));
+      for (let i = 0; i < 2; i++) {
+        const from = Math.min(w, h) * .9 - i * 8, to = rr * (1.30 + i * .18);
+        const rad = from + (to - from) * e, segs = i ? 18 : 24;
+        c.save();
+        c.strokeStyle = i ? AM : CY; c.globalAlpha = .26 + .45 * e; c.lineWidth = 1.3;
+        for (let s = 0; s < segs; s++) {
+          const a0 = s / segs * Math.PI * 2;
+          c.beginPath(); c.arc(rx, ry, rad, a0, a0 + (Math.PI * 2 / segs) * .62); c.stroke();
+        }
+        c.restore();
+      }
+    }
+
+    if (t > 6) {                                      // hexagonal seal draws itself
+      const p = cClamp((t - 6) / 1.1, 0, 1), sr = rr * .95;
+      c.save();
+      c.strokeStyle = OK; c.globalAlpha = .95; c.lineWidth = 1.8;
+      c.shadowColor = OK; c.shadowBlur = 9;
+      c.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const f = cClamp(p * 6 - i, 0, 1);
+        if (f <= 0) break;
+        const a0 = i / 6 * Math.PI * 2 - Math.PI / 2, a1 = (i + 1) / 6 * Math.PI * 2 - Math.PI / 2;
+        if (i === 0) c.moveTo(rx + Math.cos(a0) * sr, ry + Math.sin(a0) * sr);
+        const aa = a0 + (a1 - a0) * f;
+        c.lineTo(rx + Math.cos(aa) * sr, ry + Math.sin(aa) * sr);
+      }
+      c.stroke(); c.restore();
+    }
+
+    cLadder(c, w - 9, h * .18, h * .56, cClamp(t / 3, 0, 1));
+
+    if (t > 7.1 && capped === MET.length) {           // FINISHED stamps last
+      const p = cClamp(cStep(t - 7.1, 24) / .4, 0, 1), sc = 1.5 + (1 - 1.5) * cEase(p);
+      c.save();
+      c.globalAlpha = p * .82; c.fillStyle = "rgba(6,13,30,.86)";
+      c.fillRect(0, h * .86 - 13, w, 26);
+      c.restore();
+      cText(c, "FINISHED", w / 2, h * .86, Math.max(11, Math.min(16, w * .062)) * sc, OK, p, 4);
+    }
+    cGlyphs(c, w * .30, h - 8, 6, 5, 55, AM, .5);
+  });
+}
+
 function mountAnims(root) {
   root.querySelectorAll("canvas[data-anim]").forEach(cv => {
-    ({ radar, orbit, scan, camdemo: camDemo })[cv.dataset.anim]?.(cv);
+    ({ radar, orbit, scan, camdemo: camDemo, complete })[cv.dataset.anim]?.(cv);
   });
   root.querySelectorAll("canvas.wedge").forEach(cv =>
     wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
@@ -199,6 +416,11 @@ function faceStatus(p) {
     <div class="kv"><span>READY</span><b class="warm">AWAITING ASSIGNMENT</b></div>
     <span class="facechip">STATUS</span>`;
 }
+function faceComplete(p) {
+  const t0 = (celebrateUntil.get(p.id) || Date.now()) - CELEBRATE_MS;
+  return `<canvas class="bganim" data-anim="complete" data-t0="${t0}"></canvas>
+    <span class="facechip">COMPLETE</span>`;
+}
 function faceRest(kind) {
   return `<canvas class="bganim" data-anim="${kind}"></canvas><span class="facechip">SCANNER · RESTING</span>`;
 }
@@ -239,6 +461,10 @@ function panelFaceFor(p, idx) {
   // With a multi-printer fleet the camera hops from panel to panel, so only one
   // relay is ever open. A solo printer has no one to hand off to, so give it the
   // camera on a slice of the rotation instead — still never more than one stream.
+  // a finished job takes the panel for CELEBRATE_MS - but never over a fault,
+  // which keeps its own face plus the blinking lamp and flashing bezel
+  if (celebrating(p.id) && p.state !== "error" && p.state !== "offline")
+    return ["complete", faceComplete(p)];
   const camTurn = fleet.length > 1 ? idx === camHolder % fleet.length : tick % 3 === 2;
   if (camTurn) return ["cam", faceCam(p)];
   if (p.state === "error" || p.state === "offline") return ["status", faceStatus(p)];
@@ -270,7 +496,7 @@ function renderFleet(forceFaces) {
     // drops and reopens the relay — at ~1 FPS that can cost every frame.
     if (body.dataset.face !== faceKey ||
         (faceKey === "status" && body.dataset.stamp !== stamp(p)) ||
-        (forceFaces && faceKey !== "cam")) {
+        (forceFaces && faceKey !== "cam" && faceKey !== "complete")) {
       body.dataset.face = faceKey; body.dataset.stamp = stamp(p);
       body.innerHTML = html; mountAnims(body);
     }
@@ -310,14 +536,33 @@ function openDetail(id) {
 function closeDetail() {
   currentView = { name: "fleet", id: null };
   elDetail.classList.add("hidden"); elFleet.classList.remove("hidden");
+  clearTimeout(celebTimer); detailCeleb = null;
   elDetail.innerHTML = ""; // drop the camera <img> so the relay closes
   renderFleet(true);
 }
+let detailCeleb = null;   // what the current detail DOM was built for
+let celebTimer = null;    // one-shot swap back when the flourish expires
+
 function renderDetail(full) {
   const p = fleet.find(x => x.id === currentView.id);
   if (!p) { closeDetail(); return; }
+  // the detail view only rebuilds on `full`, so force one when the flourish
+  // starts or ends - otherwise it would never appear, or never leave
+  const celeb = celebrating(p.id) && p.state !== "error" && p.state !== "offline";
+  if (celeb !== detailCeleb) full = true;
   if (full || !elDetail.firstChild) {
-    const camHtml = (p.camera === "none" || p.state === "offline")
+    detailCeleb = celeb;
+    clearTimeout(celebTimer);
+    if (celeb) {
+      // fleet panels get swapped by the 8s cycle; the detail view has no such
+      // tick, so schedule the hand-back explicitly
+      celebTimer = setTimeout(() => {
+        if (currentView.name === "detail" && currentView.id === p.id) renderDetail(true);
+      }, Math.max(250, (celebrateUntil.get(p.id) || 0) - Date.now() + 120));
+    }
+    const camHtml = celeb
+      ? `<canvas class="bganim" data-anim="complete" data-t0="${(celebrateUntil.get(p.id) || Date.now()) - CELEBRATE_MS}" style="width:100%;height:250px"></canvas>`
+      : (p.camera === "none" || p.state === "offline")
       ? `<canvas class="bganim" data-anim="radar" style="width:100%;height:250px"></canvas>
          <span class="camtag dim">NO SIGNAL</span>`
       : p.camera === "demo"
