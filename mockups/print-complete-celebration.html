@@ -188,7 +188,7 @@
 
     <section class="opt">
       <div class="ohead">
-        <span class="okey">C</span><span class="oname">INSPECTION</span>
+        <span class="okey">C</span><span class="oname">INSPECTION &mdash; SHIPPED</span>
         <span class="oword">"FINISHED"</span>
       </div>
       <div class="ppanel"><div class="crt">
@@ -199,13 +199,15 @@
       </div></div>
       <div class="tl">
         <div class="tlbar"><i class="tlfill" data-fill="inspect"></i></div>
-        <div class="tlmarks"><span>0s WEDGES</span><span>5s STAMP</span><span>45s</span></div>
+        <div class="tlmarks"><span>0s WEDGES</span><span>6.0s SEAL CLOSES</span><span>7.1s STAMP</span></div>
       </div>
       <p class="desc">
-        The craft-readout layout, with your part where the ship goes. Three
-        <b>tapered wedge meters</b> ramp up under their tick combs, the part turns inside an
-        open-arc reticle, a ladder marker climbs the right edge, and FINISHED stamps across
-        once all three meters cap out.
+        <b>This is the sequence that shipped</b>, drawn by the same code as the console.
+        Three tapered wedge meters ramp up under their tick combs while an inspection line
+        sweeps up the part inside an open-arc reticle, lighting each edge it crosses.
+        Segmented rings converge and lock, then at <b>6.0s the hexagonal seal closes one
+        side at a time</b> and FINISHED stamps across at 7.1s. The part keeps turning under
+        the seal for the rest of the 45 seconds.
       </p>
       <p class="ref"><b>From photo 1</b> &mdash; wedge meters with tick combs and amber end-caps,
         open-arc reticle around a wireframe craft, dotted ladder with triangle marker.</p>
@@ -325,11 +327,10 @@
     c.fillStyle=col; c.globalAlpha=0.5; c.fill();
     c.globalAlpha=0.9; c.lineWidth=1; c.strokeStyle=col; c.stroke();
     /* tick comb over the whole track */
-    c.globalAlpha=0.85; c.strokeStyle=OK; c.lineWidth=1;
-    var n=11,i;
-    for(i=0;i<n;i++){
-      var px=x+(i/(n-1))*w;
-      var hh=h*(0.28+ (i/(n-1))*0.72);
+    c.globalAlpha=0.75; c.strokeStyle=OK; c.lineWidth=1;
+    for(var i=0;i<9;i++){
+      var px=x+(i/8)*w;
+      var hh=h*(0.3+(i/8)*0.7);
       c.beginPath(); c.moveTo(px, y+h*0.5-hh/2); c.lineTo(px, y+h*0.5+hh/2); c.stroke();
     }
     /* amber end cap at the fill point */
@@ -544,76 +545,113 @@
 
   /* ========================= C - INSPECTION ============================= */
   function Inspect(){
-    var METERS=[{k:"EXTR",m:0.92},{k:"BED",m:0.78},{k:"SURF",m:0.99}];
-    function verts(th,R,H){
-      var o=[],i,a,x,z;
-      for(i=0;i<6;i++){ a=i/6*Math.PI*2; x=Math.cos(a)*R; z=Math.sin(a)*R;
-        o.push([x*Math.cos(th)-z*Math.sin(th),-H/2,x*Math.sin(th)+z*Math.cos(th)]); }
-      for(i=0;i<6;i++){ a=i/6*Math.PI*2; x=Math.cos(a)*R; z=Math.sin(a)*R;
-        o.push([x*Math.cos(th)-z*Math.sin(th), H/2,x*Math.sin(th)+z*Math.cos(th)]); }
-      return o;
-    }
-    function proj(v,cx,cy){ var f=250,s=f/(f+v[2]); return [cx+v[0]*s, cy+v[1]*s*0.86]; }
-
+    /* Mirrors complete() in static/app.js exactly - this is the shipped sequence,
+       including the inspection sweep, the converging segmented rings and the
+       hexagonal seal that closes before FINISHED stamps. */
+    var MET=[["EXTR",0.92],["BED",0.78],["SURF",0.99]];
     return { draw:function(c,w,h,t){
-      backdrop(c,w,h);
-      var mx=w*0.06, mw=w*0.40, top=h*0.16, gap=Math.min(30,(h*0.62)/3);
+      var mx=w*0.05, mw=w*0.32;
+      var rx=w*0.70, ry=h*0.44, rr=Math.min(w,h)*0.30;
+      var pr=rr*0.5, ph=pr, i;
 
-      /* three tapered wedge meters ramp up */
-      var caps=0;
-      METERS.forEach(function(m,i){
-        var t0=0.3+i*0.75;
-        var p=clamp(step(t-t0,18)/1.1,0,1)*m.m;
-        if(p>=m.m-1e-3) caps++;
-        var y=top+i*gap;
-        bloom(c, m.k, mx, y-11, 8, CY, clamp((t-t0)/0.2,0,1)*0.9, 1.3, "left");
-        wedgeMeter(c, mx, y-4, mw, 15, p/m.m*m.m, CY);
-        bloom(c, String(Math.round(p*100)).padStart(4,"0"), mx, y+20, 8, CY,
-              clamp((t-t0)/0.3,0,1)*0.75, 1.2, "left");
+      function part(theta){
+        var out=[],s,k;
+        for(s=0;s<2;s++) for(k=0;k<6;k++){
+          var a=k/6*Math.PI*2, px=Math.cos(a)*pr, pz=Math.sin(a)*pr;
+          var vx=px*Math.cos(theta)-pz*Math.sin(theta);
+          var vz=px*Math.sin(theta)+pz*Math.cos(theta);
+          var f=250/(250+vz);
+          out.push([rx+vx*f, ry+(s?ph/2:-ph/2)*f*0.86]);
+        }
+        return out;
+      }
+
+      backdrop(c,w,h);
+
+      /* tapered wedge meters ramp in sequence */
+      var capped=0;
+      MET.forEach(function(m,idx){
+        var st=0.3+idx*0.7;
+        var pv=clamp(step(t-st,18)/1.1,0,1)*m[1];
+        if(pv>=m[1]-1e-3) capped++;
+        var y=h*(0.20+idx*0.26), al=clamp((t-st)/0.2,0,1);
+        bloom(c,m[0],mx,y-h*0.085,7.5,CY,al*0.9,1.2,"left");
+        wedgeMeter(c,mx,y-5,mw,11,pv,CY);
       });
 
       /* open-arc reticle with the part turning inside */
-      var rx=w*0.74, ry=h*0.46, rr=Math.min(w,h)*0.21;
       openReticle(c,rx,ry,rr,CY,0.85,Math.sin(t*0.35)*0.12);
-      var R=rr*0.52, H=R*1.0, th=t*0.5;
-      var v=verts(th,R,H).map(function(p){ return proj(p,rx,ry); });
-      c.save();
-      c.strokeStyle=OK; c.globalAlpha=0.9; c.lineWidth=1.2;
-      c.shadowColor=OK; c.shadowBlur=6;
-      function edge(i,j){ c.beginPath(); c.moveTo(v[i][0],v[i][1]); c.lineTo(v[j][0],v[j][1]); c.stroke(); }
-      var i;
+
+      var v=part(t*0.5);
+      var sweepOn = t>0.9 && t<4.2;
+      var sweepY = ry+ph*0.8 - clamp((t-0.9)/3,0,1)*ph*1.9;
+      function edge(a,b){
+        var p1=v[a], p2=v[b];
+        var near = sweepOn && Math.abs((p1[1]+p2[1])/2 - sweepY) < 7;
+        c.strokeStyle = near?OK:CY; c.globalAlpha = near?1:0.8;
+        c.lineWidth = near?1.7:1.1;
+        c.beginPath(); c.moveTo(p1[0],p1[1]); c.lineTo(p2[0],p2[1]); c.stroke();
+      }
       for(i=0;i<6;i++) edge(i,(i+1)%6);
       for(i=0;i<6;i++) edge(6+i,6+(i+1)%6);
       for(i=0;i<6;i++) edge(i,6+i);
-      c.restore();
+      c.globalAlpha=1;
 
-      /* bracket pair with amber triangles, flanking the reticle */
-      c.save();
-      c.strokeStyle=OK; c.globalAlpha=0.8; c.lineWidth=1.5;
-      [-1,1].forEach(function(s){
-        var bxp=rx+s*rr*1.42;
-        c.beginPath();
-        c.moveTo(bxp-s*5, ry-rr*0.42); c.lineTo(bxp, ry-rr*0.42);
-        c.lineTo(bxp, ry+rr*0.42); c.lineTo(bxp-s*5, ry+rr*0.42);
-        c.stroke();
-      });
-      c.fillStyle=AM; c.shadowColor=AM; c.shadowBlur=6;
-      c.beginPath(); c.moveTo(rx-rr*1.30,ry); c.lineTo(rx-rr*1.44,ry-4); c.lineTo(rx-rr*1.44,ry+4); c.closePath(); c.fill();
-      c.restore();
-
-      /* ladder climbs the right edge */
-      ladder(c, w-13, h*0.20, h*0.56, clamp(t/3.2,0,1), OK);
-
-      /* FINISHED stamps once all three meters cap out */
-      if(caps===3){
-        var st=clamp(step(t-2.6,24)/0.4,0,1);
-        var sc=lerp(1.5,1,ease(st));
+      /* inspection sweep */
+      if(sweepOn){
         c.save();
-        c.globalAlpha=st*0.8; c.fillStyle="rgba(6,13,30,0.86)";
-        c.fillRect(0,h*0.80-15,w,30); c.restore();
-        bloom(c,"FINISHED",w/2,h*0.80,Math.max(13,Math.min(18,w*0.066))*sc,OK,st,4.5);
+        c.strokeStyle=OK; c.globalAlpha=0.9; c.lineWidth=1.3;
+        c.shadowColor=OK; c.shadowBlur=10;
+        c.beginPath(); c.moveTo(rx-rr,sweepY); c.lineTo(rx+rr,sweepY); c.stroke();
+        c.restore();
       }
-      glyphRun(c, w*0.30, h-11, 6, 5.5, 55, AM, 0.55);
+
+      /* segmented rings converge and lock */
+      if(t>3.6){
+        var e=ease(clamp((t-3.6)/2.2,0,1));
+        for(i=0;i<2;i++){
+          var from=Math.min(w,h)*0.9-i*8, to=rr*(1.30+i*0.18);
+          var rad=from+(to-from)*e, segs=i?18:24;
+          c.save();
+          c.strokeStyle=i?AM:CY; c.globalAlpha=0.26+0.45*e; c.lineWidth=1.3;
+          for(var sg=0;sg<segs;sg++){
+            var a0=sg/segs*Math.PI*2;
+            c.beginPath(); c.arc(rx,ry,rad,a0,a0+(Math.PI*2/segs)*0.62); c.stroke();
+          }
+          c.restore();
+        }
+      }
+
+      /* the hexagonal seal closes, one side at a time, 6.0 -> 7.1s */
+      if(t>6){
+        var sp=clamp((t-6)/1.1,0,1), sr=rr*0.95;
+        c.save();
+        c.strokeStyle=OK; c.globalAlpha=0.95; c.lineWidth=1.8;
+        c.shadowColor=OK; c.shadowBlur=9;
+        c.beginPath();
+        for(i=0;i<6;i++){
+          var f=clamp(sp*6-i,0,1);
+          if(f<=0) break;
+          var b0=i/6*Math.PI*2-Math.PI/2, b1=(i+1)/6*Math.PI*2-Math.PI/2;
+          if(i===0) c.moveTo(rx+Math.cos(b0)*sr, ry+Math.sin(b0)*sr);
+          var bb=b0+(b1-b0)*f;
+          c.lineTo(rx+Math.cos(bb)*sr, ry+Math.sin(bb)*sr);
+        }
+        c.stroke(); c.restore();
+      }
+
+      ladder(c,w-9,h*0.18,h*0.56,clamp(t/3,0,1),OK);
+
+      /* FINISHED stamps once the seal has closed and the meters have capped */
+      if(t>7.1 && capped===MET.length){
+        var fp=clamp(step(t-7.1,24)/0.4,0,1), sc=1.5+(1-1.5)*ease(fp);
+        c.save();
+        c.globalAlpha=fp*0.82; c.fillStyle="rgba(6,13,30,.86)";
+        c.fillRect(0,h*0.86-13,w,26);
+        c.restore();
+        bloom(c,"FINISHED",w/2,h*0.86,Math.max(11,Math.min(16,w*0.062))*sc,OK,fp,4);
+      }
+      glyphRun(c,w*0.30,h-8,6,5,55,AM,0.5);
     }};
   }
 
