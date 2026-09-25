@@ -7,14 +7,17 @@ Runs on a Raspberry Pi 3 or newer.
 ## Quick start
 
 ```bash
-sudo apt update && sudo apt install -y python3-pip ffmpeg
-cd lab-console
-pip3 install -r requirements.txt --break-system-packages
-cp config.example.json config.json   # fill in serials + access codes
-python3 server.py                    # open http://<pi>:8080
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git python3-venv ffmpeg
+git clone https://github.com/billvanloo/LabConsole.git ~/lab-console
+cd ~/lab-console
+python3 -m venv .venv                     # avoids pip's externally-managed-environment error
+.venv/bin/pip install -r requirements.txt
+cp config.example.json config.json        # fill in serials + access codes
+.venv/bin/python server.py                # open http://<pi>:8080
 ```
 
-No printers handy? `python3 server.py --demo` runs a full simulated fleet.
+No printers handy? `.venv/bin/python server.py --demo` runs a full simulated fleet.
 
 ## Documentation
 
@@ -33,8 +36,8 @@ pre-built, so a normal install needs nothing extra. To regenerate it after a
 docs change:
 
 ```bash
-pip3 install -r requirements-dev.txt --break-system-packages   # reportlab
-python3 build_manual.py
+.venv/bin/pip install -r requirements-dev.txt   # reportlab
+.venv/bin/python build_manual.py
 ```
 
 ## Printer prerequisites (short version)

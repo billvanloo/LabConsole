@@ -98,12 +98,12 @@ stay light enough for a Pi 3.
 ## Running it
 
 ```bash
-pip install -r requirements.txt --break-system-packages   # aiohttp, paho-mqtt
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # aiohttp, paho-mqtt
 # ffmpeg must also be on PATH for X1/H2D camera relay (apt install ffmpeg)
-# regenerating the PDF manual additionally needs: pip install -r requirements-dev.txt
+# regenerating the PDF manual additionally needs: .venv/bin/pip install -r requirements-dev.txt
 
-python3 server.py --demo          # simulated 3-printer fleet, no config needed — use this for dev
-python3 server.py config.json     # real fleet, requires filled-in config.json
+.venv/bin/python server.py --demo         # simulated 3-printer fleet, no config needed — use this for dev
+.venv/bin/python server.py config.json    # real fleet, requires filled-in config.json
 ```
 
 Open `http://localhost:8080`. `--demo` is the fast path for any frontend work — it fabricates
