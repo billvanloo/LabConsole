@@ -223,7 +223,9 @@ class StateLegendFig(Flowable):
 # ------------------------------------------------------------------ content
 def P(txt): return Paragraph(txt, S["body"])
 def LI(txt): return Paragraph(txt, S["li"], bulletText="\u2022")
-def CODE(txt): return Paragraph(txt.replace("\n", "<br/>").replace(" ", "&nbsp;"), S["code"])
+def CODE(txt):
+    txt = txt.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return Paragraph(txt.replace("\n", "<br/>").replace(" ", "&nbsp;"), S["code"])
 
 
 def build(out="static/docs/LabConsole-Manual.pdf"):
@@ -253,7 +255,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "print files over FTPS, and listens for SSDP announcements so printers are found "
             "again after DHCP changes."),
           *callout("note", "\u25c8 DEMO MODE",
-                   "Run <font face='Courier'>python3 server.py --demo</font> for a fully simulated "
+                   "Run <font face='Courier'>.venv/bin/python server.py --demo</font> for a fully simulated "
                    "fleet \u2014 every state on a timer, working controls, no printers contacted. A "
                    "violet DEMO badge shows in the status bar. Ideal for training."),
           PageBreak()]
@@ -324,15 +326,28 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                    "Regenerating a printer\u2019s access code invalidates the one in config.json \u2014 "
                    "the panel goes OFFLINE until the config is updated."),
           Paragraph("02 \u00b7 INSTALLATION", S["h2"]), rule(),
-          CODE("sudo apt update && sudo apt install -y python3-pip ffmpeg\n"
+          CODE("sudo apt update && sudo apt upgrade -y\n"
+               "sudo apt install -y git python3-venv ffmpeg\n"
+               "git clone https://github.com/billvanloo/LabConsole.git /home/pi/lab-console\n"
                "cd /home/pi/lab-console\n"
-               "pip3 install -r requirements.txt --break-system-packages\n"
+               "python3 -m venv .venv\n"
+               ".venv/bin/pip install -r requirements.txt\n"
                "cp config.example.json config.json   # fill in serials + access codes\n"
-               "python3 server.py                    # open http://<pi>:8080"),
+               ".venv/bin/python server.py           # open http://<pi>:8080"),
+          *callout("note", "\u25c8 WHY A VIRTUAL ENVIRONMENT",
+                   "Current Raspberry Pi OS and Ubuntu 23.04+ refuse a plain pip3 install with "
+                   "\u201cexternally-managed-environment\u201d. The .venv folder holds the console\u2019s "
+                   "own libraries instead, so always start it with .venv/bin/python \u2014 plain "
+                   "python3 won\u2019t see them. The systemd unit already does this."),
+          *callout("note", "\u25c8 NOTE",
+                   "Paths here and in lab-console.service assume the user pi. Newer Raspberry Pi "
+                   "OS images have no default pi account \u2014 if yours differs, substitute it in "
+                   "/home/pi/lab-console and in the service file\u2019s User=, WorkingDirectory= "
+                   "and ExecStart= lines."),
           Paragraph("RUNNING ON UBUNTU / OTHER LINUX HOSTS", S["h3"]),
           P("The console runs unchanged on a standard Ubuntu machine (desktop or server) "
             "instead of a Raspberry Pi \u2014 nothing in the code is Pi-specific. Install the "
-            "same way, shown above. A few environment differences to check:"),
+            "same way, shown above (clone to ~/lab-console instead of /home/pi). A few environment differences to check:"),
           LI("<b>Firewall</b> \u2014 Ubuntu often runs ufw, which Raspberry Pi OS does not "
              "enable by default. Allow the port: <font face='Courier'>sudo ufw allow "
              "8080/tcp</font>."),
@@ -379,6 +394,8 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["A1 camera ~1 fps", "Hardware rate of the chamber camera; not a fault."],
         ["Start print: file not found", "Switch sdcard_url_base to file:///mnt/sdcard/."],
         ["SD list empty", "Only SD root files are listed; uploads go to the root."],
+        ["pip3: externally-managed-environment", "The OS blocks system-wide pip installs. Run python3 -m venv .venv, then .venv/bin/pip install -r requirements.txt (needs apt package python3-venv)."],
+        ["ModuleNotFoundError: aiohttp", "Started with plain python3 instead of .venv/bin/python."],
         ["LINK red in status bar", "Browser lost its WebSocket; it reconnects automatically. If persistent, check the service logs."],
     ], [1.7 * inch, 4.7 * inch])
     e += callout("danger", "\u25b2 SECURITY",
@@ -401,7 +418,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["full refresh", '{"pushing":{"command":"pushall"}}'],
         ["pause / resume / stop", '{"print":{"command":"pause"|"resume"|"stop","param":""}}'],
         ["chamber light", '{"system":{"command":"ledctrl","led_node":"chamber_light","led_mode":"on"|"off",\u2026}}'],
-        ["start print", '{"print":{"command":"project_file","url":"file:///sdcard/<f>.3mf","param":"Metadata/plate_1.gcode","use_ams":true,\u2026}}'],
+        ["start print", '{"print":{"command":"project_file","url":"file:///sdcard/&lt;f&gt;.3mf","param":"Metadata/plate_1.gcode","use_ams":true,\u2026}}'],
     ], [1.5 * inch, 4.9 * inch])
     e += [P("Report fields read: gcode_state (RUNNING/PREPARE/PAUSE/IDLE/FINISH/FAILED), "
             "mc_percent, mc_remaining_time, layer_num/total_layer_num, subtask_name/gcode_file, "
@@ -409,7 +426,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "types/colors, and hms / print_error for the ERROR state."),
           Paragraph("02 \u00b7 CAMERA PROTOCOLS", S["h2"]), rule()]
     e += ref_table(["MODELS", "TRANSPORT", "CONSOLE RELAY"], [
-        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:<code>@<ip>:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace."],
+        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace."],
         ["A1 / A1 Mini / P1", "Proprietary chamber-image service, TLS :6000. 80-byte auth packet, then length-prefixed JPEG frames at ~1 fps.", "Frames pass straight through \u2014 no transcoding."],
     ], [1.2 * inch, 2.9 * inch, 2.3 * inch])
     e += [P("The relay hub enforces camera.max_streams (default 1); a new viewer evicts the "
@@ -447,9 +464,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     e += ref_table(["ENDPOINT", "METHOD", "PURPOSE"], [
         ["/", "GET", "The console UI."],
         ["/ws", "GET", "WebSocket (schema above)."],
-        ["/cam/<id>", "GET", "MJPEG stream for one printer."],
-        ["/api/<id>/files", "GET", "JSON list of printable files on the SD card."],
-        ["/api/<id>/upload", "POST", "Multipart upload of a .3mf/.gcode to the SD card."],
+        ["/cam/&lt;id&gt;", "GET", "MJPEG stream for one printer."],
+        ["/api/&lt;id&gt;/files", "GET", "JSON list of printable files on the SD card."],
+        ["/api/&lt;id&gt;/upload", "POST", "Multipart upload of a .3mf/.gcode to the SD card."],
         ["/docs", "GET", "The Technical Archive."],
     ], [1.6 * inch, 0.8 * inch, 4.0 * inch])
 

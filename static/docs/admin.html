@@ -46,23 +46,46 @@
     </div>
 
     <h2 id="s2"><span class="idx">02</span> INSTALLATION</h2>
-    <pre><code>sudo apt update && sudo apt install -y python3-pip ffmpeg
+    <pre><code>sudo apt update && sudo apt upgrade -y
+sudo apt install -y git python3-venv ffmpeg
 #   (ffmpeg is only needed for X1/H2D cameras)
-# copy the lab-console folder to /home/pi/lab-console, then:
+git clone https://github.com/billvanloo/LabConsole.git /home/pi/lab-console
 cd /home/pi/lab-console
-pip3 install -r requirements.txt --break-system-packages
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 cp config.example.json config.json
-nano config.json          # fill in serials + access codes
-python3 server.py         # open http://&lt;pi-address&gt;:8080</code></pre>
-    <p>To evaluate without printers, run <code>python3 server.py --demo</code> — no config
-       file is required.</p>
+nano config.json              # fill in serials + access codes
+.venv/bin/python server.py    # open http://&lt;pi-address&gt;:8080</code></pre>
+    <p>To evaluate without printers, run <code>.venv/bin/python server.py --demo</code> — no
+       config file is required.</p>
+    <div class="callout">
+      <div class="ct">◈ WHY A VIRTUAL ENVIRONMENT</div>
+      <p>Current Raspberry Pi OS (Bookworm and later) and Ubuntu 23.04+ refuse a plain
+         <code>pip3 install</code> with <code>error: externally-managed-environment</code>, to
+         keep pip from overwriting packages the OS depends on. The <code>.venv</code> folder
+         holds the console&rsquo;s own copies of its libraries instead. Always start the
+         console with <code>.venv/bin/python</code> — plain <code>python3</code> won&rsquo;t
+         see those libraries. The systemd unit already does this.</p>
+    </div>
+    <div class="callout">
+      <div class="ct">◈ NOTE</div>
+      <p>The paths above and in <code>lab-console.service</code> assume the user
+         <code>pi</code>. Newer Raspberry Pi OS images have no default <code>pi</code> account
+         — if you chose a different username, substitute it for <code>pi</code> in
+         <code>/home/pi/lab-console</code> here and in the service file&rsquo;s
+         <code>User=</code>, <code>WorkingDirectory=</code> and <code>ExecStart=</code>
+         lines.</p>
+    </div>
 
     <h3>RUNNING ON UBUNTU / OTHER LINUX HOSTS</h3>
     <p>The console runs unchanged on a standard Ubuntu machine (desktop or server) instead of
        a Raspberry Pi — nothing in the code is Pi-specific. Install the same way:</p>
-    <pre><code>sudo apt update && sudo apt install -y python3-pip ffmpeg
-cd lab-console
-pip3 install -r requirements.txt --break-system-packages</code></pre>
+    <pre><code>sudo apt update && sudo apt upgrade -y
+sudo apt install -y git python3-venv ffmpeg
+git clone https://github.com/billvanloo/LabConsole.git ~/lab-console
+cd ~/lab-console
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt</code></pre>
     <p>A few environment differences to check:</p>
     <ul>
       <li><b>Firewall</b> — Ubuntu often runs <code>ufw</code>, which Raspberry Pi OS does not enable by default. Allow the console&rsquo;s port: <code>sudo ufw allow 8080/tcp</code>.</li>
@@ -116,6 +139,8 @@ journalctl -u lab-console -f</code></pre>
       <tr><td>A1 camera is ~1 fps</td><td>That is the chamber camera&rsquo;s hardware rate, not a fault.</td></tr>
       <tr><td>Start print: file not found</td><td>Switch <code>sdcard_url_base</code> to <code>file:///mnt/sdcard/</code>.</td></tr>
       <tr><td>SD list empty</td><td>Only files in the SD card root are listed; uploads also go to the root.</td></tr>
+      <tr><td><code>pip3 install</code> fails: externally-managed-environment</td><td>The OS blocks system-wide pip installs. Create the virtual environment and install into it: <code>python3 -m venv .venv</code>, then <code>.venv/bin/pip install -r requirements.txt</code>. If <code>venv</code> is missing, <code>sudo apt install python3-venv</code>.</td></tr>
+      <tr><td><code>ModuleNotFoundError: aiohttp</code></td><td>Started with plain <code>python3</code> instead of <code>.venv/bin/python</code>.</td></tr>
       <tr><td>LINK red in the status bar</td><td>Browser lost its WebSocket to the Pi; it reconnects automatically. If persistent, check the service with <code>journalctl</code>.</td></tr>
     </table>
 

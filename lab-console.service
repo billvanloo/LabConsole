@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/lab-console
-ExecStart=/usr/bin/python3 /home/pi/lab-console/server.py /home/pi/lab-console/config.json
+ExecStart=/home/pi/lab-console/.venv/bin/python /home/pi/lab-console/server.py /home/pi/lab-console/config.json
 Restart=always
 RestartSec=5
 
