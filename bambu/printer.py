@@ -1,10 +1,17 @@
 """One Bambu Lab printer over LAN Developer Mode MQTT (TLS :8883, user bblp)."""
 import json
+import logging
 import ssl
 import threading
 import time
 
 import paho.mqtt.client as mqtt
+
+log = logging.getLogger("labconsole.printer")
+
+# A printer normally answers a command within a second or two. Silence past this is
+# worth a log line: on cloud-connected firmware a refused command is often just dropped.
+REPLY_TIMEOUT = 10.0
 
 # gcode_state -> dashboard state
 _RUNNING = {"RUNNING", "PREPARE", "SLICING"}
@@ -28,6 +35,8 @@ class BambuPrinter:
         self._client = None
         self._lock = threading.Lock()
         self._stop = False
+        self._pending = {}          # sequence_id -> command name, awaiting a reply
+        self._last_problem = None   # dedupes repeated connect failures in the log
 
     # ------------------------------------------------- connection
     def start(self):
@@ -41,7 +50,8 @@ class BambuPrinter:
             try:
                 self._connect(self.ip)
                 return  # paho loop_forever handles reconnects to this IP
-            except Exception:
+            except Exception as e:
+                self._problem(f"cannot connect to {self.ip}:8883: {e}")
                 self._set_online(False)
                 time.sleep(5)
 
@@ -64,6 +74,7 @@ class BambuPrinter:
     def set_ip(self, ip):
         """Called by discovery; reconnect if the address moved."""
         if ip and ip != self.ip:
+            log.info("%s: address changed %s -> %s (discovery)", self.id, self.ip, ip)
             self.ip = ip
             if self._client:
                 try:
@@ -80,14 +91,26 @@ class BambuPrinter:
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
         if reason_code == 0:
+            log.info("%s: MQTT connected to %s", self.id, self.ip)
+            self._last_problem = None
             client.subscribe(f"device/{self.serial}/report")
             self._set_online(True)
             self.push_all()
         else:
+            # "Not authorized" / "Bad user name or password" = wrong access code
+            self._problem(f"MQTT login refused by {self.ip}: {reason_code}")
             self._set_online(False)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
+        if self._online:
+            log.warning("%s: MQTT disconnected from %s: %s", self.id, self.ip, reason_code)
         self._set_online(False)
+
+    def _problem(self, text):
+        """Log a connection problem once, not on every retry."""
+        if text != self._last_problem:
+            self._last_problem = text
+            log.warning("%s: %s", self.id, text)
 
     def _set_online(self, val):
         if self._online != val:
@@ -98,13 +121,47 @@ class BambuPrinter:
     def _on_message(self, client, userdata, msg):
         try:
             data = json.loads(msg.payload)
-        except Exception:
+        except Exception as e:
+            log.debug("%s: unreadable report (%s): %r", self.id, e, msg.payload[:200])
+            return
+        if isinstance(data, dict):
+            self._log_replies(data)
+        else:
             return
         p = data.get("print")
         if isinstance(p, dict):
             with self._lock:
                 self._merge(self._report, p)
             self.on_change(self)
+
+    def _log_replies(self, data):
+        """Log the printer's answers to commands; routine status pushes are skipped."""
+        for section, body in data.items():
+            if not isinstance(body, dict):
+                continue
+            cmd = body.get("command")
+            if not cmd or cmd == "push_status":
+                continue
+            seq = str(body.get("sequence_id", ""))
+            ours = self._pending.pop(seq, None)
+            if not ours:
+                # replies to Bambu Studio/Handy or unsolicited messages
+                log.debug("%s: %s/%s message: %s", self.id, section, cmd, body)
+                continue
+            result = str(body.get("result", "")).lower()
+            detail = {k: body[k] for k in ("result", "reason", "err_code", "errno")
+                      if k in body}
+            if result in ("", "success", "ok"):
+                log.info("%s: printer accepted %s (seq %s) %s", self.id, cmd, seq, detail)
+            else:
+                log.warning("%s: printer REJECTED %s (seq %s): %s", self.id, cmd, seq, detail)
+
+    def _check_reply(self, seq):
+        cmd = self._pending.pop(seq, None)
+        if cmd:
+            log.warning("%s: no reply to %s (seq %s) after %.0fs; the printer may have "
+                        "ignored it (cloud-mode firmware can drop third-party commands)",
+                        self.id, cmd, seq, REPLY_TIMEOUT)
 
     @staticmethod
     def _merge(dst, src):
@@ -183,9 +240,25 @@ class BambuPrinter:
         if not self._client:
             raise RuntimeError("printer not connected")
         self._seq += 1
+        seq = str(self._seq)
+        names = []
         for section in payload.values():
-            section.setdefault("sequence_id", str(self._seq))
-        self._client.publish(f"device/{self.serial}/request", json.dumps(payload))
+            section.setdefault("sequence_id", seq)
+            names.append(section.get("command", "?"))
+        name = "/".join(names)
+        info = self._client.publish(f"device/{self.serial}/request", json.dumps(payload))
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            log.error("%s: could not send %s (seq %s): %s", self.id, name, seq,
+                      mqtt.error_string(info.rc))
+            raise RuntimeError(f"send failed: {mqtt.error_string(info.rc)}")
+        if name == "pushall":
+            log.debug("%s: sent pushall (seq %s)", self.id, seq)
+            return
+        log.info("%s: sent %s (seq %s)", self.id, name, seq)
+        self._pending[seq] = name
+        t = threading.Timer(REPLY_TIMEOUT, self._check_reply, args=(seq,))
+        t.daemon = True
+        t.start()
 
     def push_all(self):
         self._publish({"pushing": {"command": "pushall"}})

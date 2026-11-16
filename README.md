@@ -52,6 +52,11 @@ printer from Bambu Cloud. Either way the console must be able to reach the
 printers directly, so Wi-Fi networks with client isolation won't work. Full
 details in the Admin Guide.
 
+## When something isn't working
+
+Check `lab-console.log` in the console folder. It records each command with the
+printer's reply, plus connection, camera and file errors. Details in the Admin Guide.
+
 ## Security
 
 No login; access codes live in config.json. Keep the console on a trusted

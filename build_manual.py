@@ -406,7 +406,18 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["camera.max_streams", "1", "Concurrent camera relays; keep 1 on a Pi 3. New viewers evict the oldest."],
         ["camera.rtsp_fps / rtsp_width", "8 / 640", "RTSPS transcode cost knobs."],
         ["sdcard_url_base", "file:///sdcard/", "Switch to file:///mnt/sdcard/ if start-print reports file-not-found."],
+        ["log_file", "lab-console.log", "Log file (relative to the console folder, or absolute). Rotates at 1 MB, keeps 3 old files. \"\" turns file logging off."],
+        ["log_level", "INFO", "DEBUG adds noise useful for deep debugging; WARNING keeps only problems."],
     ], [1.7 * inch, 1.0 * inch, 3.7 * inch])
+    e += [Paragraph("LOG FILE", S["h3"]),
+          P("The console writes what it does and what goes wrong to lab-console.log in its folder "
+            "(<font face='Courier'>tail -f lab-console.log</font> to watch it). Access codes are "
+            "masked. Every console command is logged with the printer\u2019s answer: "
+            "<b>printer accepted</b>, <b>printer REJECTED</b>, or <b>no reply</b> after 10 seconds, "
+            "which is how a command quietly refused by cloud-mode firmware shows up. Also logged: "
+            "MQTT connections and refused logins (wrong access code), printer state changes with "
+            "HMS codes in Bambu\u2019s wiki format (e.g. 0300_0100_0001_0007), file list and "
+            "upload failures, camera failures, and discovery problems.")]
     e += [Paragraph("04 \u00b7 RUN AT BOOT / KIOSK DISPLAY", S["h2"]), rule(),
           CODE("sudo cp lab-console.service /etc/systemd/system/\n"
                "sudo systemctl daemon-reload\n"
@@ -417,10 +428,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "frontend pauses panel cycling while the tab is hidden."),
           Paragraph("05 \u00b7 TROUBLESHOOTING", S["h2"]), rule()]
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
+        ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
         ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
-        ["Pause / stop / light has no effect", "Cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
+        ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
-        ["Camera face stays black", "The console log gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means a console copy older than the self-signed-certificate fix, run with a newer ffmpeg: update the console."],
+        ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means a console copy older than the self-signed-certificate fix, run with a newer ffmpeg: update the console."],
         ["A1 camera ~1 fps", "Hardware rate of the chamber camera; not a fault."],
         ["Start print: file not found", "Switch sdcard_url_base to file:///mnt/sdcard/."],
         ["SD list empty", "Only SD root files are listed; uploads go to the root."],

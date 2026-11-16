@@ -6,8 +6,11 @@ rtsp_frames    : X1 family / H2D RTSPS on port 322, relayed through ffmpeg as MJ
 import socket
 import ssl
 import struct
+import logging
 import subprocess
 import threading
+
+log = logging.getLogger("labconsole.camera")
 
 JPEG_SOI = b"\xff\xd8\xff"
 JPEG_EOI = b"\xff\xd9"
@@ -84,7 +87,7 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
             chunk = proc.stdout.read(8192)
             if not chunk:
                 if proc.wait() != 0:
-                    print(f"[camera {ip}] ffmpeg exited with code {proc.returncode}", flush=True)
+                    log.warning("[camera %s] ffmpeg exited with code %s", ip, proc.returncode)
                 return
             buf += chunk
             while True:
@@ -107,4 +110,4 @@ def _log_stderr(proc, ip, access_code):
     for raw in proc.stderr:
         line = raw.decode(errors="replace").rstrip()
         if line:
-            print(f"[camera {ip}] ffmpeg: {line.replace(access_code, '****')}", flush=True)
+            log.warning("[camera %s] ffmpeg: %s", ip, line.replace(access_code, "****"))

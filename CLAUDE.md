@@ -149,6 +149,14 @@ asyncio.run(main())"
   `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
   silently otherwise), and its stderr is logged as `[camera …]` lines — keep both. The TTL is the guard that
   keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
+- **Logging** goes through the stdlib `logging` module, configured in `setup_logging()` in
+  `server.py`: stderr plus a rotating `lab-console.log` (1 MB x 4, sized for a Pi's SD card;
+  `log_file` / `log_level` in config). A formatter masks every configured access code — log
+  through `logging.getLogger("labconsole.<area>")`, never `print`, so masking applies.
+  `BambuPrinter._publish()` records each command's `sequence_id` and `_log_replies()` matches the
+  printer's answer to it; a 10 s `REPLY_TIMEOUT` logs "no reply", which is how cloud-mode firmware
+  refusing a command shows up. Connection failures are deduped via `_problem()` so retries don't
+  flood the file.
 - **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990,
   matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
   printer. It's additive — `config.json` can also just hardcode an `ip` per printer.

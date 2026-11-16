@@ -1,8 +1,11 @@
 """Passive SSDP listener. Bambu printers announce themselves on UDP :2021 and
 :1990; the NOTIFY carries USN (serial) and Location (IP). Lets the console
 follow printers across DHCP changes without static addresses."""
+import logging
 import socket
 import threading
+
+log = logging.getLogger("labconsole.discovery")
 
 PORTS = (2021, 1990)
 
@@ -36,13 +39,18 @@ def _listen(port, on_found):
         except (AttributeError, OSError):
             pass
         s.bind(("", port))
-    except OSError:
-        return  # port taken (e.g. Bambu Studio running on the same host)
+    except OSError as e:
+        # port taken (e.g. Bambu Studio running on the same host)
+        log.warning("SSDP listener on UDP %d unavailable (%s); printers won't be "
+                    "re-found on that port", port, e)
+        return
+    log.info("SSDP listener on UDP %d", port)
     while True:
         try:
             data, addr = s.recvfrom(4096)
             serial, ip = _parse(data)
             if serial:
                 on_found(serial, ip or addr[0])
-        except Exception:
+        except Exception as e:
+            log.debug("SSDP datagram on %d ignored: %s", port, e)
             continue
