@@ -138,6 +138,16 @@ class BambuPrinter:
             except (TypeError, ValueError):
                 return None
 
+        # Newer firmware can report chamber temperature only under device.ctc
+        # (the chamber temperature control module), not as chamber_temper. On
+        # H2-series the value packs the target into the high 16 bits.
+        chamber = num("chamber_temper")
+        if chamber is None:
+            try:
+                chamber = int(r["device"]["ctc"]["info"]["temp"]) & 0xFFFF
+            except (KeyError, TypeError, ValueError):
+                pass
+
         ams_trays = []
         for unit in ((r.get("ams") or {}).get("ams") or []):
             for tray in (unit.get("tray") or []):
@@ -159,7 +169,7 @@ class BambuPrinter:
             "total_layers": r.get("total_layer_num"),
             "nozzle": num("nozzle_temper"), "nozzle_target": num("nozzle_target_temper"),
             "bed": num("bed_temper"), "bed_target": num("bed_target_temper"),
-            "chamber": num("chamber_temper"),
+            "chamber": chamber,
             "fan": r.get("cooling_fan_speed"),
             "speed": r.get("spd_lvl_name") or r.get("spd_lvl"),
             "light": next((l.get("mode") for l in (r.get("lights_report") or [])
