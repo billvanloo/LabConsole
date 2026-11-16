@@ -7,7 +7,11 @@ Guidance for Claude Code (or any future Claude session) working in this reposito
 **Lab Console** — a self-hosted web dashboard for monitoring and controlling a small
 fleet (1–10) of Bambu Lab 3D printers over the local network. Built to run on a
 Raspberry Pi 3+ (also runs unchanged on Ubuntu/other Linux). No cloud dependency —
-everything talks to printers over LAN Developer Mode.
+the console talks to printers only over the local network. Printers may be in LAN Only +
+Developer Mode (full control) *or* left on Bambu Cloud, which the owner's school lab
+requires so students can print from Bambu Studio: there, local status and cameras work
+(verified on an X1C) but firmware may refuse some commands. Don't reintroduce wording
+that makes Developer Mode a requirement.
 
 Visual style is a deliberate design constraint, not incidental: a dark navy CRT-panel
 aesthetic with cyan vector line art, amber accents, and red/orange reserved *exclusively*
@@ -141,7 +145,9 @@ asyncio.run(main())"
   remove this cap, it's what keeps a Pi 3 alive. `server.py` also keeps the newest frame
   per printer (`_preview`, `PREVIEW_TTL` = 30s) and replays it immediately on connect:
   measured time-to-first-frame on a chamber camera is ~3s, against an ~8s panel face
-  window, so without it most of a camera turn rendered black. The TTL is the guard that
+  window, so without it most of a camera turn rendered black. ffmpeg runs with
+  `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
+  silently otherwise), and its stderr is logged as `[camera …]` lines — keep both. The TTL is the guard that
   keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
 - **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990,
   matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
