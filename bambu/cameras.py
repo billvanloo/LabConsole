@@ -60,6 +60,10 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
         "-rtsp_transport", "tcp",
+        # The printer presents a self-signed certificate (as on MQTT :8883, where
+        # printer.py also skips verification). Newer ffmpeg builds verify by
+        # default and refuse the stream with "certificate verify failed".
+        "-tls_verify", "0",
         "-i", url,
         "-an",
         "-vf", f"fps={fps},scale={width}:-2",
