@@ -183,8 +183,9 @@ async def cam_handler(request):
                 _preview[p.id] = (time.monotonic(), frame)
                 # drop frames if the client is slow; latest wins
                 loop.call_soon_threadsafe(_offer, queue, frame)
-        except Exception:
-            pass
+        except Exception as e:
+            # the panel can only show black, so the reason has to reach the log
+            print(f"[camera {p.id}] stream failed: {e}", flush=True)
         finally:
             loop.call_soon_threadsafe(_offer, queue, None)
 

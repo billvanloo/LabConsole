@@ -7,6 +7,7 @@ import socket
 import ssl
 import struct
 import subprocess
+import threading
 
 JPEG_SOI = b"\xff\xd8\xff"
 JPEG_EOI = b"\xff\xd9"
@@ -65,12 +66,21 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
         "-q:v", "7",
         "-f", "image2pipe", "-vcodec", "mjpeg", "-",
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        raise RuntimeError("ffmpeg not found on PATH; it is required for RTSPS cameras")
+    # ffmpeg reports why a stream fails (bad code, TLS, refused) only on stderr, so
+    # pass it to the console log instead of discarding it. The access code is part
+    # of the URL and ffmpeg can echo it, so mask it.
+    threading.Thread(target=_log_stderr, args=(proc, ip, access_code), daemon=True).start()
     buf = b""
     try:
         while not stop_flag():
             chunk = proc.stdout.read(8192)
             if not chunk:
+                if proc.wait() != 0:
+                    print(f"[camera {ip}] ffmpeg exited with code {proc.returncode}", flush=True)
                 return
             buf += chunk
             while True:
@@ -87,3 +97,10 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
                 buf = buf[eoi + 2:]
     finally:
         proc.kill()
+
+
+def _log_stderr(proc, ip, access_code):
+    for raw in proc.stderr:
+        line = raw.decode(errors="replace").rstrip()
+        if line:
+            print(f"[camera {ip}] ffmpeg: {line.replace(access_code, '****')}", flush=True)
