@@ -250,8 +250,8 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           ArchFig(),
           Paragraph("FIG 0.1 \u2014 ONE MQTT LINK PER PRINTER; CAMERAS RELAYED ONE AT A TIME; "
                     "STATE PUSHED TO BROWSERS OVER A WEBSOCKET.", S["cap"]),
-          P("The Pi holds one always-on MQTT connection per printer (Developer Mode, TLS, port "
-            "8883) for status and control, relays one live camera at a time as MJPEG, moves "
+          P("The Pi holds one always-on MQTT connection per printer (local TLS on port 8883, "
+            "with the printer in Developer Mode or left on Bambu Cloud) for status and control, relays one live camera at a time as MJPEG, moves "
             "print files over FTPS, and listens for SSDP announcements so printers are found "
             "again after DHCP changes."),
           *callout("note", "\u25c8 DEMO MODE",
@@ -267,8 +267,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("The status bar shows fleet totals, the clock, and a <b>LINK</b> indicator for the "
             "browser\u2019s connection to the Pi \u2014 if LINK is red, the view may be stale. Each "
             "printer is a bezel-framed panel that cycles every ~8 seconds between its status "
-            "readout, an ambient scanner animation (idle printers only), and \u2014 for one printer "
-            "at a time \u2014 the live camera slot. The state lamp in the panel header never cycles "
+            "readout, an ambient scanner animation (any printer not in ERROR or OFFLINE), and \u2014 "
+            "for one printer at a time \u2014 the live camera slot. A panel is never more than "
+            "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
           Paragraph("02 \u00b7 PRINTER STATES", S["h2"]), rule(),
           StateLegendFig(), Spacer(1, 6)]
@@ -276,8 +277,8 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["IDLE", "Steady cyan lamp. Online and ready; readout shows temperatures and the last job."],
         ["PRINTING", "Pulsing amber. File name, layer count, temperatures, time remaining, progress."],
         ["PAUSED", "Steady violet. Job held; resume from the detail view."],
-        ["ERROR", "Blinking red lamp <b>and the entire panel bezel flashes red in sync</b>. Readout lists HMS code(s). Error panels never cycle away."],
-        ["OFFLINE", "Dark lamp. No MQTT link \u2014 check power, network, Developer Mode."],
+        ["ERROR", "Blinking red lamp <b>and the entire panel bezel flashes red in sync</b>. Readout lists HMS code(s). Error panels never show the scanner animation; they give way only to the live camera on their turn."],
+        ["OFFLINE", "Dark lamp. No MQTT link \u2014 check power, network, and the printer\u2019s network settings."],
     ], [0.9 * inch, 5.5 * inch])
     e += [PanelFig(),
           Paragraph("FIG 2.1 \u2014 A PRINTING PANEL AND AN ERROR PANEL AS DRAWN ON THE CONSOLE.", S["cap"]),
@@ -313,15 +314,43 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     # ---- admin guide
     e += [Paragraph("ADMIN GUIDE", S["h1"]),
           Paragraph("SETUP, CONFIGURATION, AND CARE OF THE CONSOLE", S["h1sub"]),
-          Paragraph("01 \u00b7 PRINTER PREREQUISITES (EACH PRINTER)", S["h2"]), rule(),
+          Paragraph("01 \u00b7 PRINTER PREREQUISITES", S["h2"]), rule(),
+          P("The console reaches every printer over the local network, and a printer can be set "
+            "up for it in either of two modes. Pick one per printer:")]
+    e += ref_table(["MODE", "WHAT YOU GET", "WHAT YOU GIVE UP"], [
+        ["<b>Cloud mode</b> (stays on Bambu Cloud)",
+         "Status, progress, ERROR detection, temperatures, AMS, and the camera. Bambu Studio and "
+         "Bambu Handy keep working over the cloud.",
+         "Some controls may be refused: firmware with Bambu\u2019s 2025 authorization change "
+         "rejects certain third-party commands while cloud-connected. A refused command has no effect."],
+        ["<b>LAN Only + Developer Mode</b>",
+         "Everything, including pause, resume, stop, light, and starting prints.",
+         "No Bambu Cloud: no Bambu Handy, and Bambu Studio only from the same local network."],
+    ], [1.4 * inch, 2.5 * inch, 2.5 * inch])
+    e += [P("Cloud mode is the usual choice in a shared lab where people send prints from their "
+            "own computers. Verified on an X1C: status, the live camera, and the chamber light work "
+            "in cloud mode. Pause, resume, stop, and start print are not yet verified there; test "
+            "them on your own printers before relying on them."),
+          P("Then, on each printer:"),
           LI("Update to recent firmware."),
-          LI("Switch to <b>LAN Only Mode</b> and enable <b>Developer Mode</b> (Settings \u2192 "
-             "General/Network). This opens the local MQTT, live-stream, and FTP channels. "
-             "Developer Mode printers cannot simultaneously connect to Bambu Cloud."),
+          LI("<b>LAN Only + Developer Mode only:</b> switch to <b>LAN Only Mode</b> and enable "
+             "<b>Developer Mode</b> (Settings \u2192 General/Network). Skip for cloud mode."),
           LI("Record the <b>Access Code</b> (Settings \u2192 Network) and <b>Serial Number</b> "
              "(Settings \u2192 Device)."),
-          LI("<b>X1-series / H2D only:</b> enable <b>LAN Mode Liveview</b> for the camera."),
+          LI("<b>X1-series / H2D only:</b> enable <b>LAN Mode Liveview</b> for the camera "
+             "(works in both modes)."),
+          LI("Ask your network administrator for a fixed address (DHCP reservation) per printer "
+             "and set it as <font face='Courier'>ip</font> in config.json. Many school and office "
+             "networks block the announcements discovery relies on."),
           Spacer(1, 4),
+          *callout("warn", "\u25c8 NETWORK REQUIREMENT",
+                   "The console host must be able to open connections to each printer. Wi-Fi "
+                   "networks with <b>client isolation</b> (common on school and guest networks) "
+                   "block this, and every panel stays OFFLINE in either mode. Check from a laptop "
+                   "on the same network that ports 8883 and 322 (X1/H2D) or 6000 (A1/P1) answer."),
+          *callout("warn", "\u25c8 FIRMWARE UPDATES",
+                   "In cloud mode, which controls work depends on firmware. If controls work today, "
+                   "a later update may restrict them. Monitoring and the camera are not affected."),
           *callout("warn", "\u25c8 NOTE",
                    "Regenerating a printer\u2019s access code invalidates the one in config.json \u2014 "
                    "the panel goes OFFLINE until the config is updated."),
@@ -378,7 +407,18 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["camera.max_streams", "1", "Concurrent camera relays; keep 1 on a Pi 3. New viewers evict the oldest."],
         ["camera.rtsp_fps / rtsp_width", "8 / 640", "RTSPS transcode cost knobs."],
         ["sdcard_url_base", "file:///sdcard/", "Switch to file:///mnt/sdcard/ if start-print reports file-not-found."],
+        ["log_file", "lab-console.log", "Log file (relative to the console folder, or absolute). Rotates at 1 MB, keeps 3 old files. \"\" turns file logging off."],
+        ["log_level", "INFO", "DEBUG adds noise useful for deep debugging; WARNING keeps only problems."],
     ], [1.7 * inch, 1.0 * inch, 3.7 * inch])
+    e += [Paragraph("LOG FILE", S["h3"]),
+          P("The console writes what it does and what goes wrong to lab-console.log in its folder "
+            "(<font face='Courier'>tail -f lab-console.log</font> to watch it). Access codes are "
+            "masked. Every console command is logged with the printer\u2019s answer: "
+            "<b>printer accepted</b>, <b>printer REJECTED</b>, or <b>no reply</b> after 10 seconds, "
+            "which is how a command quietly refused by cloud-mode firmware shows up. Also logged: "
+            "MQTT connections and refused logins (wrong access code), printer state changes with "
+            "HMS codes in Bambu\u2019s wiki format (e.g. 0300_0100_0001_0007), file list and "
+            "upload failures, camera failures, and discovery problems.")]
     e += [Paragraph("04 \u00b7 RUN AT BOOT / KIOSK DISPLAY", S["h2"]), rule(),
           CODE("sudo cp lab-console.service /etc/systemd/system/\n"
                "sudo systemctl daemon-reload\n"
@@ -389,8 +429,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "frontend pauses panel cycling while the tab is hidden."),
           Paragraph("05 \u00b7 TROUBLESHOOTING", S["h2"]), rule()]
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
-        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, Developer Mode, access code. Discovery re-finds moved printers within about a minute."],
+        ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
+        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
+        ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
+        ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means a console copy older than the self-signed-certificate fix, run with a newer ffmpeg: update the console."],
         ["A1 camera ~1 fps", "Hardware rate of the chamber camera; not a fault."],
         ["Start print: file not found", "Switch sdcard_url_base to file:///mnt/sdcard/."],
         ["SD list empty", "Only SD root files are listed; uploads go to the root."],
@@ -406,12 +449,15 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     # ---- technical reference
     e += [Paragraph("TECHNICAL REFERENCE", S["h1"]),
           Paragraph("PROTOCOLS, SCHEMAS, AND THE HTTP API", S["h1sub"]),
-          P("Printer-side protocols are the community-documented LAN Developer Mode interfaces "
-            "(OpenBambuAPI; Bambu Lab wiki, third-party integration). Nothing uses Bambu Cloud."),
+          P("Printer-side protocols are the community-documented local interfaces (OpenBambuAPI; "
+            "Bambu Lab wiki, third-party integration). The console talks only to printers on the "
+            "local network, never to Bambu Cloud; the printers may be in LAN Only + Developer Mode "
+            "or stay cloud-connected, and the same interfaces answer in both cases."),
           Paragraph("01 \u00b7 MQTT (STATUS + CONTROL)", S["h2"]), rule(),
           P("One TLS connection per printer to port <b>8883</b>, username "
             "<font face='Courier'>bblp</font>, password = access code, self-signed certificate "
-            "accepted."),
+            "accepted. Status pushes arrive in both printer modes; on a cloud-connected printer, "
+            "firmware with Bambu\u2019s authorization change can drop some commands without a reply."),
           CODE("device/<SERIAL>/report    <-  status pushes (partial JSON, merged)\n"
                "device/<SERIAL>/request   ->  commands")]
     e += ref_table(["ACTION", "PAYLOAD (ABBREVIATED)"], [
@@ -422,11 +468,15 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     ], [1.5 * inch, 4.9 * inch])
     e += [P("Report fields read: gcode_state (RUNNING/PREPARE/PAUSE/IDLE/FINISH/FAILED), "
             "mc_percent, mc_remaining_time, layer_num/total_layer_num, subtask_name/gcode_file, "
-            "temperatures and targets, cooling_fan_speed, spd_lvl_name, lights_report, AMS tray "
-            "types/colors, and hms / print_error for the ERROR state."),
+            "temperatures and targets (chamber falls back to device.ctc.info.temp, low 16 bits, "
+            "when chamber_temper is absent), cooling_fan_speed, spd_lvl_name, lights_report, AMS tray "
+            "types/colors, and hms / print_error for the ERROR state. The third group of an HMS code is "
+            "its level: 0001 error, 0002 warning (pauses the print), 0003 info. Only 0001/0002 or a "
+            "nonzero print_error set ERROR; level-0003 notices (e.g. 0C00_0300_0003_000B, first-layer "
+            "inspection in progress) are logged but do not change the panel state."),
           Paragraph("02 \u00b7 CAMERA PROTOCOLS", S["h2"]), rule()]
     e += ref_table(["MODELS", "TRANSPORT", "CONSOLE RELAY"], [
-        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace."],
+        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace. Run with -tls_verify 0 (self-signed certificate); errors go to the log."],
         ["A1 / A1 Mini / P1", "Proprietary chamber-image service, TLS :6000. 80-byte auth packet, then length-prefixed JPEG frames at ~1 fps.", "Frames pass straight through \u2014 no transcoding."],
     ], [1.2 * inch, 2.9 * inch, 2.3 * inch])
     e += [P("The relay hub enforces camera.max_streams (default 1); a new viewer evicts the "

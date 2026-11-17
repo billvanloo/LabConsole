@@ -38,8 +38,9 @@
        what you see may be stale.</p>
     <p>Each printer is a bezel-framed panel. Panels <b>cycle automatically every ~8
        seconds</b> between three faces: the status readout, an ambient scanner animation
-       (idle printers only), and — for one printer at a time — the live camera slot, which
-       rotates through the fleet. The state lamp in each panel&rsquo;s header never cycles
+       (any printer not in ERROR or OFFLINE, printing ones included), and — for one printer
+       at a time — the live camera slot, which rotates through the fleet. A panel is never
+       more than three turns away from its status readout. The state lamp in each panel&rsquo;s header never cycles
        away, so fleet state stays readable from across the room. <b>Tap any panel</b> to
        open its detail console.</p>
     <p>When a job finishes, that panel &mdash; or its detail console, if you have it open
@@ -57,9 +58,9 @@
       <tr><td><span class="lamp paused"></span><span class="sw paused">PAUSED</span></td>
           <td>Steady violet. The job is held and can be resumed from the detail view.</td></tr>
       <tr><td><span class="lamp error"></span><span class="sw error">ERROR</span></td>
-          <td>Blinking red — and the <b>entire panel bezel flashes red</b> in sync. The readout lists HMS code(s). Error panels never cycle away to other faces.</td></tr>
+          <td>Blinking red — and the <b>entire panel bezel flashes red</b> in sync. The readout lists HMS code(s). Error panels never show the scanner animation: they hold the fault readout, giving way only to the live camera on their turn so you can see the failed print.</td></tr>
       <tr><td><span class="lamp offline"></span><span class="sw offline">OFFLINE</span></td>
-          <td>Dark lamp. No MQTT link — check power, network, and Developer Mode.</td></tr>
+          <td>Dark lamp. No MQTT link — check power, network, and the printer&rsquo;s network settings.</td></tr>
     </table>
 
     <figure class="shot">
@@ -103,7 +104,7 @@
           </div></div>
         </div>
       </div>
-      <figcaption><span class="fig">FIG 2.2</span> — RESTING SCANNER FACES SHOWN BY IDLE PRINTERS BETWEEN STATUS CYCLES. PURELY AMBIENT — NO DATA MEANING.</figcaption>
+      <figcaption><span class="fig">FIG 2.2</span> — RESTING SCANNER FACES SHOWN BETWEEN STATUS CYCLES BY ANY PRINTER NOT IN ERROR OR OFFLINE. PURELY AMBIENT — NO DATA MEANING.</figcaption>
     </figure>
 
     <h2 id="s3"><span class="idx">03</span> CAMERA VIEWS</h2>

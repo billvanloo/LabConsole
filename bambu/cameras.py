@@ -6,7 +6,11 @@ rtsp_frames    : X1 family / H2D RTSPS on port 322, relayed through ffmpeg as MJ
 import socket
 import ssl
 import struct
+import logging
 import subprocess
+import threading
+
+log = logging.getLogger("labconsole.camera")
 
 JPEG_SOI = b"\xff\xd8\xff"
 JPEG_EOI = b"\xff\xd9"
@@ -59,18 +63,31 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
         "-rtsp_transport", "tcp",
+        # The printer presents a self-signed certificate (as on MQTT :8883, where
+        # printer.py also skips verification). Newer ffmpeg builds verify by
+        # default and refuse the stream with "certificate verify failed".
+        "-tls_verify", "0",
         "-i", url,
         "-an",
         "-vf", f"fps={fps},scale={width}:-2",
         "-q:v", "7",
         "-f", "image2pipe", "-vcodec", "mjpeg", "-",
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        raise RuntimeError("ffmpeg not found on PATH; it is required for RTSPS cameras")
+    # ffmpeg reports why a stream fails (bad code, TLS, refused) only on stderr, so
+    # pass it to the console log instead of discarding it. The access code is part
+    # of the URL and ffmpeg can echo it, so mask it.
+    threading.Thread(target=_log_stderr, args=(proc, ip, access_code), daemon=True).start()
     buf = b""
     try:
         while not stop_flag():
             chunk = proc.stdout.read(8192)
             if not chunk:
+                if proc.wait() != 0:
+                    log.warning("[camera %s] ffmpeg exited with code %s", ip, proc.returncode)
                 return
             buf += chunk
             while True:
@@ -87,3 +104,10 @@ def rtsp_frames(ip: str, access_code: str, stop_flag, fps=8, width=640):
                 buf = buf[eoi + 2:]
     finally:
         proc.kill()
+
+
+def _log_stderr(proc, ip, access_code):
+    for raw in proc.stderr:
+        line = raw.decode(errors="replace").rstrip()
+        if line:
+            log.warning("[camera %s] ffmpeg: %s", ip, line.replace(access_code, "****"))

@@ -6,7 +6,10 @@ Then open http://<pi>:8080
 """
 import asyncio
 import json
+import logging
+import logging.handlers
 import pathlib
+import re
 import sys
 import threading
 import time
@@ -31,11 +34,106 @@ PRINTERS: dict[str, BambuPrinter] = {}
 STATE_VERSION = 0
 _version_lock = threading.Lock()
 
+log = logging.getLogger("labconsole")
 
-def _bump(_printer=None):
+
+class _RedactingFormatter(logging.Formatter):
+    """Masks printer access codes wherever they would appear in a log line."""
+
+    def __init__(self, fmt, secrets):
+        super().__init__(fmt)
+        self.secrets = [s for s in secrets if len(s) >= 6]
+
+    def format(self, record):
+        out = super().format(record)
+        for s in self.secrets:
+            out = out.replace(s, "****")
+        return out
+
+
+def setup_logging():
+    """Log to stderr (terminal / journalctl) and, unless disabled, to a rotating file.
+
+    Rotation caps the file at ~1 MB x 4 so a Pi's SD card can't fill up or wear out.
+    """
+    level = getattr(logging, str(CFG.get("log_level", "INFO")).upper(), logging.INFO)
+    fmt = _RedactingFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+                              [str(p.get("access_code", "")) for p in CFG.get("printers", [])])
+    root = logging.getLogger()
+    root.setLevel(level)
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    root.addHandler(console)
+    # one line per HTTP request (every camera frame stream, every static file) is noise
+    logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
+
+    path = CFG.get("log_file", "lab-console.log")
+    if path:
+        path = pathlib.Path(path)
+        if not path.is_absolute():
+            path = ROOT / path
+        try:
+            fh = logging.handlers.RotatingFileHandler(
+                path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+            fh.setFormatter(fmt)
+            root.addHandler(fh)
+        except OSError as e:
+            log.warning("cannot write log file %s: %s (logging to terminal only)", path, e)
+            path = None
+
+    def thread_hook(a):
+        name = a.thread.name if a.thread else "?"
+        log.error("unhandled exception in thread %s", name,
+                  exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
+    threading.excepthook = thread_hook
+    return path
+
+
+_last_seen = {}  # printer id -> (state, hms codes, print_error, notices) last logged
+
+
+def _hms_code(h):
+    """HMS entry as the code Bambu's wiki uses, e.g. 0300_0100_0001_0007."""
+    try:
+        a, c = int(h.get("attr") or 0), int(h.get("code") or 0)
+    except (TypeError, ValueError):
+        return str(h)
+    return f"{a >> 16:04X}_{a & 0xFFFF:04X}_{c >> 16:04X}_{c & 0xFFFF:04X}"
+
+
+def _log_transition(p):
+    try:
+        v = p.view()
+    except Exception:
+        log.exception("%s: building the printer view failed", getattr(p, "id", "?"))
+        return
+    hms = tuple(_hms_code(h) for h in v.get("hms") or [])
+    notices = tuple(_hms_code(h) for h in v.get("notices") or [])
+    key = (v["state"], hms, v.get("print_error") or 0, notices)
+    prev = _last_seen.get(p.id)
+    if prev == key:
+        return
+    _last_seen[p.id] = key
+    new_notices = [n for n in notices if not prev or n not in prev[3]]
+    if new_notices:
+        # level-3 HMS: informational only, never an ERROR (look up on Bambu's wiki)
+        log.info("%s: printer notice %s", p.id, ", ".join(new_notices))
+    was = prev[0] if prev else "start"
+    if v["state"] == "error":
+        err = v.get("print_error") or 0
+        log.warning("%s: %s -> ERROR  print_error=%s  hms=%s", p.id, was,
+                    f"{err:08X}" if err else "0", ", ".join(hms) or "none")
+    elif v["state"] != was:
+        extra = f"  file={v['file']!r} {v['percent']}%" if v["state"] == "printing" else ""
+        log.info("%s: %s -> %s%s", p.id, was, v["state"], extra)
+
+
+def _bump(printer=None):
     global STATE_VERSION
     with _version_lock:
         STATE_VERSION += 1
+    if printer is not None:
+        _log_transition(printer)
 
 
 def fleet_view():
@@ -69,6 +167,11 @@ async def ws_handler(request):
                 req = json.loads(msg.data)
                 await handle_command(ws, req)
             except Exception as e:
+                if isinstance(e, (ValueError, RuntimeError)):
+                    log.warning("command %s from %s failed: %s", msg.data[:200],
+                                request.remote, e)
+                else:
+                    log.exception("command %s from %s failed", msg.data[:200], request.remote)
                 await ws.send_json({"type": "error", "detail": str(e)})
     finally:
         task.cancel()
@@ -82,6 +185,7 @@ async def handle_command(ws, req):
     if not p:
         raise ValueError("unknown printer")
     action = req.get("action")
+    log.info("%s: %s requested from the console", p.id, action)
     if action == "pause":
         p.pause()
     elif action == "resume":
@@ -183,8 +287,9 @@ async def cam_handler(request):
                 _preview[p.id] = (time.monotonic(), frame)
                 # drop frames if the client is slow; latest wins
                 loop.call_soon_threadsafe(_offer, queue, frame)
-        except Exception:
-            pass
+        except Exception as e:
+            # the panel can only show black, so the reason has to reach the log
+            log.warning("[camera %s] stream failed: %s", p.id, e)
         finally:
             loop.call_soon_threadsafe(_offer, queue, None)
 
@@ -225,6 +330,7 @@ async def files_handler(request):
         files = await asyncio.to_thread(ftps.list_printable, p.ip, p.access_code)
         return web.json_response({"files": files})
     except Exception as e:
+        log.warning("%s: listing SD card files over FTPS failed: %r", p.id, e)
         raise web.HTTPBadGateway(text=f"FTPS error: {e}")
 
 
@@ -255,8 +361,10 @@ async def upload_handler(request):
                                                 actual_size=len(data))
     try:
         await asyncio.to_thread(ftps.upload, p.ip, p.access_code, name, bytes(data))
+        log.info("%s: uploaded %s (%d bytes)", p.id, name, len(data))
         return web.json_response({"ok": True, "name": name})
     except Exception as e:
+        log.warning("%s: uploading %s over FTPS failed: %r", p.id, name, e)
         raise web.HTTPBadGateway(text=f"FTPS error: {e}")
 
 
@@ -266,8 +374,15 @@ async def index(request):
 
 
 def main():
+    logfile = setup_logging()
+    try:
+        version = re.search(r"^version:\s*(\S+)", (ROOT / "VERSION").read_text(), re.M)[1]
+    except (OSError, TypeError):
+        version = "?"
+    log.info("Lab Console %s starting (%s); log file: %s", version,
+             "demo" if DEMO else CONFIG_PATH, logfile or "disabled")
     if DEMO:
-        print("*** DEMO MODE — simulated fleet, no printers contacted ***")
+        log.info("*** DEMO MODE — simulated fleet, no printers contacted ***")
         for pc in DEMO_FLEET:
             p = DemoPrinter(pc, on_change=_bump)
             PRINTERS[p.id] = p
@@ -276,6 +391,8 @@ def main():
         for pc in CFG["printers"]:
             p = BambuPrinter(pc, on_change=_bump)
             PRINTERS[p.id] = p
+            log.info("%s: %s %s, ip %s, camera %s", p.id, p.model, p.serial,
+                     p.ip or "(waiting for discovery)", p.camera_kind)
             p.start()
 
         by_serial = {p.serial: p for p in PRINTERS.values()}

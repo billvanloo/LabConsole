@@ -32,14 +32,18 @@
     <h1>TECHNICAL REFERENCE</h1>
     <div class="h1sub">PROTOCOLS, SCHEMAS, AND THE HTTP API</div>
 
-    <p>The printer-side protocols below are the community-documented LAN Developer Mode
-       interfaces (see the OpenBambuAPI project and the Bambu Lab wiki&rsquo;s third-party
-       integration page). Nothing here uses Bambu Cloud.</p>
+    <p>The printer-side protocols below are the community-documented local interfaces (see
+       the OpenBambuAPI project and the Bambu Lab wiki&rsquo;s third-party integration page).
+       The console talks only to printers on the local network, never to Bambu Cloud. The
+       printers themselves may be in LAN Only + Developer Mode or stay connected to Bambu
+       Cloud; the same interfaces answer in both cases (see the Admin Guide, section 01).</p>
 
     <h2 id="s1"><span class="idx">01</span> MQTT (STATUS + CONTROL)</h2>
     <p>One TLS connection per printer to port <b>8883</b>, username <code>bblp</code>,
        password = the printer&rsquo;s access code, self-signed certificate accepted. The
-       console subscribes to the report topic and publishes commands to the request topic:</p>
+       console subscribes to the report topic and publishes commands to the request topic.
+       Status pushes arrive in both printer modes. On a cloud-connected printer, firmware with
+       Bambu&rsquo;s authorization change can drop some commands without a reply:</p>
     <pre><code>device/&lt;SERIAL&gt;/report    ← status pushes (partial JSON, merged client-side)
 device/&lt;SERIAL&gt;/request   → commands</code></pre>
     <p>Commands the console sends (each carries a <code>sequence_id</code>):</p>
@@ -53,17 +57,24 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
     <p>Report fields the console reads: <code>gcode_state</code> (RUNNING / PREPARE / PAUSE /
        IDLE / FINISH / FAILED), <code>mc_percent</code>, <code>mc_remaining_time</code>,
        <code>layer_num</code> / <code>total_layer_num</code>, <code>subtask_name</code> /
-       <code>gcode_file</code>, nozzle/bed/chamber temperatures and targets,
+       <code>gcode_file</code>, nozzle/bed/chamber temperatures and targets (chamber falls back to
+       <code>device.ctc.info.temp</code>, low 16 bits, on firmware that omits
+       <code>chamber_temper</code>),
        <code>cooling_fan_speed</code>, <code>spd_lvl_name</code>, <code>lights_report</code>,
        AMS tray types and colors, and <code>hms</code> / <code>print_error</code> for the
-       ERROR state.</p>
+       ERROR state. The third group of an HMS code is its level: <code>0001</code> error,
+       <code>0002</code> warning (pauses the print), <code>0003</code> info. Only levels 0001
+       and 0002, or a nonzero <code>print_error</code>, set ERROR. Level 0003 entries are
+       routine notices (for example <code>0C00_0300_0003_000B</code>, first-layer inspection
+       in progress); they are sent as <code>notices</code> and written to the log, but do not
+       change the panel state.</p>
 
     <h2 id="s2"><span class="idx">02</span> CAMERA PROTOCOLS</h2>
     <table class="ref">
       <tr><th>MODELS</th><th>TRANSPORT</th><th>CONSOLE RELAY</th></tr>
       <tr><td>X1 / X1C / X1E / H2D</td>
           <td>RTSPS on port <b>322</b>, URL <code>rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1</code>. Requires LAN Mode Liveview.</td>
-          <td>ffmpeg transcodes to MJPEG at a configurable fps/width; frames are re-served as <code>multipart/x-mixed-replace</code>.</td></tr>
+          <td>ffmpeg transcodes to MJPEG at a configurable fps/width; frames are re-served as <code>multipart/x-mixed-replace</code>. ffmpeg runs with <code>-tls_verify 0</code> because the printer&rsquo;s certificate is self-signed; newer ffmpeg builds verify by default. ffmpeg&rsquo;s errors go to the console log.</td></tr>
       <tr><td>A1 / A1 Mini / P1</td>
           <td>Proprietary chamber-image service, TLS on port <b>6000</b>. An 80-byte auth packet (username + access code) is sent; the printer then streams length-prefixed JPEG frames at ~1 fps.</td>
           <td>Frames pass straight through to the same MJPEG endpoint — no transcoding.</td></tr>

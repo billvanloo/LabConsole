@@ -458,24 +458,28 @@ function ensurePanels() {
   });
 }
 function panelFaceFor(p, idx) {
-  // With a multi-printer fleet the camera hops from panel to panel, so only one
-  // relay is ever open. A solo printer has no one to hand off to, so give it the
-  // camera on a slice of the rotation instead — still never more than one stream.
+  const n = fleet.length;
   // a finished job takes the panel for CELEBRATE_MS - but never over a fault,
   // which keeps its own face plus the blinking lamp and flashing bezel
   if (celebrating(p.id) && p.state !== "error" && p.state !== "offline")
     return ["complete", faceComplete(p)];
-  const camTurn = fleet.length > 1 ? idx === camHolder % fleet.length : tick % 3 === 2;
+  // ERROR / OFFLINE panels never rest: the fault text stays up between camera turns.
+  const frozen = p.state === "error" || p.state === "offline";
+  // With a multi-printer fleet the camera hops from panel to panel, so only one
+  // relay is ever open. A solo printer has no one to hand off to, so it gets the
+  // camera on one turn in three instead (idx === camHolder % 1 would pin it there).
+  const camTurn = n > 1 ? idx === camHolder % n : tick % 3 === 2;
   if (camTurn) return ["cam", faceCam(p)];
-  if (p.state === "error" || p.state === "offline") return ["status", faceStatus(p)];
-  // (tick + idx), not tick: at fleet.length 2 the camera turn lands on exactly the
-  // odd ticks the rest face wanted, so panel 1 never rested. Offsetting by idx
-  // decouples the two schedules per panel.
-  if ((tick + idx) % 2 === 1 && (p.state === "idle")) {
-    // idx alone varies the instrument across panels but never over time, so a
-    // solo printer would sit on REST_KINDS[0] forever. Advance with the cycle
-    // counter too. tick only moves on the 8s cycle, so the face stays put
-    // between renders and telemetry pushes don't swap the instrument mid-view.
+  if (frozen) return ["status", faceStatus(p)];
+  // Status alternates with a resting instrument for every printer that isn't in a
+  // fault, printing included. Period 3, not 2: camHolder advances with tick, so at
+  // two printers a tick % 2 test lands every rest turn exactly where the status turn
+  // should be and the readout never shows. 3 is coprime with that rotation.
+  const phase = n > 1 ? (((tick - idx) % 3) + 3) % 3 : tick % 3;
+  if (phase === 1) {
+    // Advance the instrument with the cycle so a panel doesn't show the same one
+    // forever. tick only moves on the 8s cycle, so the face stays put between
+    // renders and telemetry pushes don't swap the instrument mid-view.
     const kind = REST_KINDS[(idx + Math.floor(tick / 3)) % REST_KINDS.length];
     return ["rest-" + kind, faceRest(kind)];
   }

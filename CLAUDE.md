@@ -7,7 +7,11 @@ Guidance for Claude Code (or any future Claude session) working in this reposito
 **Lab Console** — a self-hosted web dashboard for monitoring and controlling a small
 fleet (1–10) of Bambu Lab 3D printers over the local network. Built to run on a
 Raspberry Pi 3+ (also runs unchanged on Ubuntu/other Linux). No cloud dependency —
-everything talks to printers over LAN Developer Mode.
+the console talks to printers only over the local network. Printers may be in LAN Only +
+Developer Mode (full control) *or* left on Bambu Cloud, which the owner's school lab
+requires so students can print from Bambu Studio: there, local status and cameras work
+(verified on an X1C) but firmware may refuse some commands. Don't reintroduce wording
+that makes Developer Mode a requirement.
 
 Visual style is a deliberate design constraint, not incidental: a dark navy CRT-panel
 aesthetic with cyan vector line art, amber accents, and red/orange reserved *exclusively*
@@ -21,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.3.0), then confirm all 25 files are present:
+Check `VERSION` at the repo root (should read 1.4.0), then confirm all 26 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (25 files):
+Expected file manifest (26 files):
 
 ```
 ./CLAUDE.md
@@ -42,6 +46,7 @@ Expected file manifest (25 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./mockups/fleet-cycle-mockup.html
 ./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
@@ -58,7 +63,7 @@ Expected file manifest (25 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.3.0:
+Quick behavioral confirmations that you're on 1.4.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
@@ -130,8 +135,17 @@ asyncio.run(main())"
 - **One MQTT connection per printer**, TLS on :8883, user `bblp`, password = the printer's
   LAN access code. `BambuPrinter._merge()` deep-merges partial status pushes into a running
   `_report` dict — printers don't always send full state, so don't replace wholesale.
+  **Exactly one live client per printer**: `_run()` is the only place a client is created;
+  `set_ip()` just disconnects and lets `_run()` reconnect to the new address; callbacks ignore
+  any client that isn't `self._client`; the client id carries a random per-process suffix. A
+  broker drops the older connection when a client id is reused, so two clients (a stale-IP
+  retry thread plus a discovery-spawned one, or two consoles) knocked each other offline every
+  ~3 s. Don't reintroduce a second connection path.
 - **State derivation lives in `BambuPrinter.view()`**: `idle | printing | paused | error |
-  offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. If you add a
+  offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. Only HMS
+  entries at level 0001 (error) / 0002 (warning) count — the level is the code's third group
+  (`code >> 16`). Level 0003 is info (first-layer inspection, SD card notices) and goes to
+  `notices` + the log instead: treating it as ERROR made every printer flash red on connect. If you add a
   new derived field, add it here and it flows to the frontend automatically via the existing
   WebSocket push.
 - **Camera protocols differ by model** and this is load-bearing, not a detail: X1-series/H2D
@@ -141,8 +155,18 @@ asyncio.run(main())"
   remove this cap, it's what keeps a Pi 3 alive. `server.py` also keeps the newest frame
   per printer (`_preview`, `PREVIEW_TTL` = 30s) and replays it immediately on connect:
   measured time-to-first-frame on a chamber camera is ~3s, against an ~8s panel face
-  window, so without it most of a camera turn rendered black. The TTL is the guard that
+  window, so without it most of a camera turn rendered black. ffmpeg runs with
+  `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
+  silently otherwise), and its stderr is logged as `[camera …]` lines — keep both. The TTL is the guard that
   keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
+- **Logging** goes through the stdlib `logging` module, configured in `setup_logging()` in
+  `server.py`: stderr plus a rotating `lab-console.log` (1 MB x 4, sized for a Pi's SD card;
+  `log_file` / `log_level` in config). A formatter masks every configured access code — log
+  through `logging.getLogger("labconsole.<area>")`, never `print`, so masking applies.
+  `BambuPrinter._publish()` records each command's `sequence_id` and `_log_replies()` matches the
+  printer's answer to it; a 10 s `REPLY_TIMEOUT` logs "no reply", which is how cloud-mode firmware
+  refusing a command shows up. Connection failures are deduped via `_problem()` so retries don't
+  flood the file.
 - **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990,
   matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
   printer. It's additive — `config.json` can also just hardcode an `ip` per printer.
@@ -152,7 +176,10 @@ asyncio.run(main())"
   `BambuPrinter`, add the matching one to `DemoPrinter` or demo mode will throw on that action.
 - **Frontend has no framework and no build step.** `static/app.js` owns: WebSocket
   connect/reconnect, panel face-cycling (status / resting-animation / camera / print-complete,
-  ~8s rotation),
+  ~8s rotation — see `panelFaceFor()`: every panel not in ERROR/OFFLINE alternates status with a
+  resting instrument on a **period of 3**, never 2, because `camHolder` advances with `tick` and a
+  period-2 test lands every rest turn on the status turn at two printers; ERROR/OFFLINE panels
+  hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it),
   the canvas-drawn vector instruments (radar/orbit/scan), the detail view, and the two modals
   (stop-confirm, start-print). Canvas animation loops self-terminate via `cv.isConnected`
   checks — when adding a new animated face, follow that pattern or it'll leak loops on
@@ -205,7 +232,8 @@ mockup file first rather than editing `static/` directly, unless told otherwise.
 Mockups live in `mockups/` and are **kept after porting**, not deleted — they are the record of
 what was approved, and they run standalone so a later session can see the intended motion
 without reconstructing it from `app.js`. `mockups/print-complete-celebration.html` holds all
-three print-complete proposals; option C (INSPECTION) is the one that shipped. The visual
+three print-complete proposals; option C (INSPECTION) is the one that shipped.
+`mockups/fleet-cycle-mockup.html` runs the v1.3 and v1.4 face-cycling rules side by side. The visual
 vocabulary there — tapered wedge meters, open-arc reticles, stepped rather than eased motion —
 came from the owner's own Galaxy's Edge reference photographs, so prefer it over inventing a
 new treatment.

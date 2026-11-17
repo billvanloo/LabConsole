@@ -42,9 +42,20 @@ docs change:
 
 ## Printer prerequisites (short version)
 
-Each printer: recent firmware, LAN Only Mode + Developer Mode enabled, note
-the Access Code and Serial. X1-series/H2D additionally need LAN Mode
-Liveview for cameras. Full details in the Admin Guide.
+Each printer: recent firmware; note the Access Code and Serial. X1-series/H2D
+additionally need LAN Mode Liveview for cameras.
+
+Printers can stay on Bambu Cloud: status, errors and cameras work, but the
+firmware may refuse some controls (pause/stop/start). For guaranteed full
+control, use LAN Only Mode + Developer Mode instead, which disconnects the
+printer from Bambu Cloud. Either way the console must be able to reach the
+printers directly, so Wi-Fi networks with client isolation won't work. Full
+details in the Admin Guide.
+
+## When something isn't working
+
+Check `lab-console.log` in the console folder. It records each command with the
+printer's reply, plus connection, camera and file errors. Details in the Admin Guide.
 
 ## Security
 
