@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.4.0), then confirm all 27 files are present:
+Check `VERSION` at the repo root (should read 1.4.0), then confirm all 28 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (27 files):
+Expected file manifest (28 files):
 
 ```
 ./CLAUDE.md
@@ -48,6 +48,7 @@ Expected file manifest (27 files):
 ./lab-console.service
 ./mockups/fleet-cycle-mockup.html
 ./mockups/fleet-layout-mockup.html
+./mockups/large-panel-options-mockup.html
 ./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
