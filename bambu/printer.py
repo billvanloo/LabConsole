@@ -1,6 +1,7 @@
 """One Bambu Lab printer over LAN Developer Mode MQTT (TLS :8883, user bblp)."""
 import json
 import logging
+import secrets
 import ssl
 import threading
 import time
@@ -33,6 +34,10 @@ class BambuPrinter:
         self._online = False
         self._seq = 0
         self._client = None
+        # Unique per console process. A broker drops the older connection when a client
+        # id is reused, so a fixed id let two consoles (or two clients in one console)
+        # knock each other off every few seconds.
+        self._client_id = f"labconsole-{self.id}-{secrets.token_hex(3)}"
         self._lock = threading.Lock()
         self._stop = False
         self._pending = {}          # sequence_id -> command name, awaiting a reply
@@ -43,21 +48,35 @@ class BambuPrinter:
         threading.Thread(target=self._run, name=f"mqtt-{self.id}", daemon=True).start()
 
     def _run(self):
+        """The only place a client is created, so a printer never has two connections.
+
+        Each pass connects to the current address and lets paho handle reconnects there.
+        loop_forever returns when set_ip() disconnects the client, and the next pass
+        picks up the new address.
+        """
         while not self._stop:
-            if not self.ip:
+            ip = self.ip
+            if not ip:
                 time.sleep(3)  # waiting for discovery to supply an IP
                 continue
+            c = self._make_client()
+            self._client = c
             try:
-                self._connect(self.ip)
-                return  # paho loop_forever handles reconnects to this IP
+                c.connect(ip, 8883, keepalive=30)
+                c.loop_forever(retry_first_connection=True)
             except Exception as e:
-                self._problem(f"cannot connect to {self.ip}:8883: {e}")
+                self._problem(f"cannot connect to {ip}:8883: {e}")
+            finally:
+                self._client = None
+                self._close(c)
                 self._set_online(False)
-                time.sleep(5)
+            if self.ip == ip:
+                time.sleep(5)  # failed or dropped at this address: back off
+            # else: the address changed, reconnect to the new one straight away
 
-    def _connect(self, ip):
+    def _make_client(self):
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=f"labconsole-{self.id}", protocol=mqtt.MQTTv311)
+                        client_id=self._client_id, protocol=mqtt.MQTTv311)
         c.username_pw_set("bblp", self.access_code)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
@@ -67,41 +86,53 @@ class BambuPrinter:
         c.on_disconnect = self._on_disconnect
         c.on_message = self._on_message
         c.reconnect_delay_set(min_delay=2, max_delay=30)
-        self._client = c
-        c.connect(ip, 8883, keepalive=30)
-        c.loop_forever(retry_first_connection=True)
+        return c
+
+    @staticmethod
+    def _close(c):
+        try:
+            c.disconnect()
+        except Exception:
+            pass
+        try:
+            sock = c.socket()
+            if sock:
+                sock.close()
+        except Exception:
+            pass
 
     def set_ip(self, ip):
-        """Called by discovery; reconnect if the address moved."""
+        """Called by discovery. Only moves the address; _run() does the reconnecting."""
         if ip and ip != self.ip:
             log.info("%s: address changed %s -> %s (discovery)", self.id, self.ip, ip)
             self.ip = ip
-            if self._client:
+            c = self._client
+            if c:
                 try:
-                    self._client.disconnect()  # loop_forever will reconnect... to old host
+                    c.disconnect()  # ends loop_forever; _run() reconnects to the new ip
                 except Exception:
                     pass
-                # simplest reliable path: spawn a fresh connection thread
-                try:
-                    self._client.loop_stop()
-                except Exception:
-                    pass
-                self._client = None
-                threading.Thread(target=self._run, daemon=True).start()
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        if client is not self._client:
+            return  # a client being retired; never let it act for this printer
         if reason_code == 0:
             log.info("%s: MQTT connected to %s", self.id, self.ip)
             self._last_problem = None
             client.subscribe(f"device/{self.serial}/report")
             self._set_online(True)
-            self.push_all()
+            try:
+                self.push_all()
+            except Exception as e:  # never let a failed refresh kill the connection loop
+                log.warning("%s: initial status request failed: %s", self.id, e)
         else:
             # "Not authorized" / "Bad user name or password" = wrong access code
             self._problem(f"MQTT login refused by {self.ip}: {reason_code}")
             self._set_online(False)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
+        if client is not self._client:
+            return
         if self._online:
             log.warning("%s: MQTT disconnected from %s: %s", self.id, self.ip, reason_code)
         self._set_online(False)
@@ -119,6 +150,8 @@ class BambuPrinter:
 
     # ------------------------------------------------- reports
     def _on_message(self, client, userdata, msg):
+        if client is not self._client:
+            return
         try:
             data = json.loads(msg.payload)
         except Exception as e:

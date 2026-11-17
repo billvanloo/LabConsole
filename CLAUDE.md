@@ -134,6 +134,12 @@ asyncio.run(main())"
 - **One MQTT connection per printer**, TLS on :8883, user `bblp`, password = the printer's
   LAN access code. `BambuPrinter._merge()` deep-merges partial status pushes into a running
   `_report` dict — printers don't always send full state, so don't replace wholesale.
+  **Exactly one live client per printer**: `_run()` is the only place a client is created;
+  `set_ip()` just disconnects and lets `_run()` reconnect to the new address; callbacks ignore
+  any client that isn't `self._client`; the client id carries a random per-process suffix. A
+  broker drops the older connection when a client id is reused, so two clients (a stale-IP
+  retry thread plus a discovery-spawned one, or two consoles) knocked each other offline every
+  ~3 s. Don't reintroduce a second connection path.
 - **State derivation lives in `BambuPrinter.view()`**: `idle | printing | paused | error |
   offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. If you add a
   new derived field, add it here and it flows to the frontend automatically via the existing
