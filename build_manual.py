@@ -309,7 +309,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("04 \u00b7 CONTROLS", S["h2"]), rule(),
           P("All controls live in the detail console (tap a panel). To return to the fleet, use "
             "<b>FLEET OVERVIEW</b> at the top left, the <b>FLEET</b> button in the "
-            "bottom-right corner, or press <b>Esc</b>.")]
+            "bottom-right corner, or press <b>Esc</b>."),
+          P("On a wide screen the detail console fills it: the live camera takes the left column "
+            "above the controls, and the right column opens with the fleet panels\u2019 progress "
+            "reticle beside the file name, time left, and layer, followed by the remaining readings "
+            "and the AMS slots.")]
     e += ref_table(["CONTROL", "BEHAVIOR"], [
         ["\u23f8 PAUSE / \u25b6 RESUME", "Holds or resumes the job; the button swaps by state. Resume also clears a recoverable ERROR (e.g. after feeding filament)."],
         ["\u25a0 STOP", "Aborts the job. Always asks for confirmation first."],

@@ -609,7 +609,7 @@ function renderDetail(full) {
     elDetail.innerHTML = `
       <div class="dhead">
         <button class="backbtn" id="back">◂ FLEET OVERVIEW</button>
-        <span class="lamp ${p.state}"></span>
+        <span class="lamp ${p.state}" id="dlamp"></span>
         <span style="color:var(--cyan)">${esc(p.name)}</span>
         <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${esc(p.model)}</span>
         <span class="dstate" id="dstate"></span>
@@ -642,6 +642,8 @@ function renderDetail(full) {
     mountAnims(elDetail);
   }
   // live-updating parts
+  // the header is only built on a full render, so keep its lamp in step with the state
+  document.getElementById("dlamp").className = "lamp " + p.state;
   document.getElementById("dstate").textContent =
     stateWord[p.state] + (p.percent != null && (p.state === "printing" || p.state === "paused") ? ` · ${p.percent}%` : "");
   const bp = document.getElementById("btn-pause");
@@ -650,22 +652,45 @@ function renderDetail(full) {
   document.getElementById("btn-stop").disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
   document.getElementById("btn-start").disabled = (p.state === "printing" || p.state === "offline");
   const slots = (p.ams || []).slice(0, 4);
-  document.getElementById("telem").innerHTML = `
+  // On a wide screen a progress block heads this column: the fleet panels' reticle beside
+  // file, time left and layer, which then drop out of the grid below (CSS hides the
+  // .inprog cells). Elsewhere the block is hidden and the grid shows them as before.
+  // Approved as option B of mockups/detail-view-mockup.html (issue #6).
+  const busy = p.state === "printing" || p.state === "paused" || p.state === "error";
+  const tint = { paused: "vi", error: "al" }[p.state] || "";
+  const progress = busy ? `
+    <div class="dprog">
+      <canvas class="reticle" data-pct="${p.percent ?? 0}"${tint ? ` data-col="${tint}"` : ""}
+        data-label="${{ printing: "COMPLETE", paused: "PAUSED", error: "HELD" }[p.state]}"></canvas>
+      <div>
+        <div class="tl">FILE</div><div class="file">${esc(p.file) || "—"}</div>
+        <div class="tl">TIME LEFT</div><div class="big ${tint}">${p.state === "printing" ? fmtEta(p.remaining_min) : "HELD"}</div>
+        <div class="tl">LAYER</div><div class="mid">${p.layer ?? "—"}<small> / ${p.total_layers ?? "—"}</small></div>
+      </div>
+    </div>` : `
+    <div class="dprog noret"><div>
+      <div class="tl">LAST JOB</div><div class="file">${esc(p.file) || "—"}</div>
+      <div class="tl">STATUS</div><div class="big ${p.state}">${p.state === "offline" ? "OFFLINE" : "READY"}</div>
+    </div></div>`;
+  document.getElementById("telem").innerHTML = `${progress}
     <div class="telem">
-      <div class="tcell"><div class="tl">FILE</div><div class="tv file">${esc(p.file) || "—"}</div></div>
-      <div class="tcell"><div class="tl">TIME LEFT</div><div class="tv warm">${fmtEta(p.remaining_min)}</div></div>
-      <div class="tcell"><div class="tl">LAYER</div><div class="tv">${p.layer ?? "—"}<small> / ${p.total_layers ?? "—"}</small></div></div>
+      <div class="tcell inprog"><div class="tl">FILE</div><div class="tv file">${esc(p.file) || "—"}</div></div>
+      <div class="tcell inprog"><div class="tl">TIME LEFT</div><div class="tv warm">${fmtEta(p.remaining_min)}</div></div>
+      <div class="tcell inprog"><div class="tl">LAYER</div><div class="tv">${p.layer ?? "—"}<small> / ${p.total_layers ?? "—"}</small></div></div>
       <div class="tcell"><div class="tl">SPEED</div><div class="tv">${esc(p.speed) || "—"}</div></div>
       <div class="tcell"><div class="tl">NOZZLE</div><div class="tv warm">${p.nozzle ?? "—"}°<small> / ${p.nozzle_target ?? "—"}°</small></div></div>
       <div class="tcell"><div class="tl">BED</div><div class="tv warm">${p.bed ?? "—"}°<small> / ${p.bed_target ?? "—"}°</small></div></div>
       <div class="tcell"><div class="tl">CHAMBER</div><div class="tv">${p.chamber ?? "—"}°</div></div>
       <div class="tcell"><div class="tl">PART FAN</div><div class="tv">${p.fan ?? "—"}<small>%</small></div></div>
     </div>
+    ${p.hms?.length ? `<div class="hmsbox">${p.hms.map(hmsCode).join("<br>")}</div>` : ""}
     ${slots.length ? `<div class="amslbl">AMS · ${slots.length} SLOTS</div>
       <div class="ams">${slots.map(t => `
         <div class="slot"><i style="${t.color ? `background:${esc(t.color)}` : ""}"></i>${esc(t.type) || "—"}</div>`).join("")}
-      </div>` : ""}
-    ${p.hms?.length ? `<div class="hmsbox">${p.hms.map(hmsCode).join("<br>")}</div>` : ""}`;
+      </div>` : ""}`;
+  // redrawn with each push; hidden (zero-size) outside the wide layout, where fit() skips it
+  document.querySelectorAll("#telem canvas.reticle").forEach(cv =>
+    reticle(cv, +cv.dataset.pct || 0, { al: AL, vi: VI }[cv.dataset.col] || AM, cv.dataset.label));
 }
 
 /* ================= modals ================= */
