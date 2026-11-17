@@ -339,9 +339,13 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
              "(Settings \u2192 Device)."),
           LI("<b>X1-series / H2D only:</b> enable <b>LAN Mode Liveview</b> for the camera "
              "(works in both modes)."),
-          LI("Ask your network administrator for a fixed address (DHCP reservation) per printer "
-             "and set it as <font face='Courier'>ip</font> in config.json. Many school and office "
-             "networks block the announcements discovery relies on."),
+          LI("<b>Optional:</b> a fixed address per printer. Discovery recognizes printers by serial "
+             "and follows them when DHCP hands out a new address, so fixed addresses aren\u2019t "
+             "required (the console has run this way on a school network). Still put each printer\u2019s "
+             "current address in config.json as <font face='Courier'>ip</font>: a correct one connects "
+             "instantly and a stale one is corrected within seconds. Ask for DHCP reservations only if "
+             "discovery can\u2019t see the printers: an \u2018SSDP listener \u2026 unavailable\u2019 log "
+             "warning, or a panel stuck OFFLINE after its printer\u2019s address changes."),
           Spacer(1, 4),
           *callout("warn", "\u25c8 NETWORK REQUIREMENT",
                    "The console host must be able to open connections to each printer. Wi-Fi "
