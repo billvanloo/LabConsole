@@ -271,6 +271,15 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "for one printer at a time \u2014 the live camera slot. A panel is never more than "
             "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
+          Paragraph("THE LAYER STACK", S["h3"]),
+          P("While a printer is printing or paused, its animation turns alternate between the "
+            "scanner animations and the layer stack, a picture of the job itself. Each block is one "
+            "layer: finished layers stack bottom-up, left to right, as glowing cyan blocks; the layer "
+            "being printed glows amber and pulses, then flashes white and settles into the stack. "
+            "While paused, that block turns violet and stops pulsing. The dashed rounded rectangle is "
+            "the whole job, with faint outlines for the layers still to come; the readout at the "
+            "bottom left gives the layer and percentage. On very tall prints each block stands for "
+            "several layers, and a 1 BLOCK = N LAYERS note appears in the corner."),
           P("On a wide screen, such as a fullscreen lab display, panels are laid out two across "
             "and two rows fill the screen, so each panel takes about a quarter of the display, "
             "with text and meters scaled to match. A third printer sits bottom-left, leaving the "

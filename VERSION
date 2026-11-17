@@ -1,6 +1,6 @@
 Lab Console
-version: 1.4.0
-date: 2026-11-17
+version: 1.5.0
+date: 2026-11-18
 tree: lab-console/
 
 Feature set at this version:
@@ -15,6 +15,9 @@ Feature set at this version:
   - Resting vector animations on every non-fault panel, printing included
   - lab-console.log: rotating log of commands, printer replies, connection/camera errors
   - Only HMS error/warning levels raise ERROR; info notices are logged
+  - Two-across fleet layout on wide screens, with a progress reticle on large panels (1.5)
+  - Detail view fills the screen; prominent way back to the fleet (1.5)
+  - Layer stack face, alternating with the ambient instruments while printing/paused (1.5)
 
 If any of the above is missing from your working tree, you have an outdated
 copy. See the FILE MANIFEST section of CLAUDE.md to verify.

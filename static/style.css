@@ -101,6 +101,8 @@ body{background:var(--bg);color:var(--cyan);
   #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
   #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
   #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackread{font-size:clamp(9px,1.3cqw,15px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackbucket{font-size:clamp(8px,1.1cqw,13px);right:1.6cqw;top:.6cqw}
 
   /* status faces with progress get a large open-arc reticle beside the readout, filling the
      band that otherwise sits empty at this size (option C of
@@ -184,6 +186,12 @@ canvas.reticle{display:none}
 .ppct{font-size:12px;color:var(--amber)}
 
 .facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+/* layer stack overlays (mockups/layer-stack-mockup.html) */
+.stackread{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+  letter-spacing:.15em;z-index:2}
+.stackread b{color:var(--cyan);font-weight:400}
+.stackbucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+  color:var(--amber);z-index:2}
 .camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
   color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
 .camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
