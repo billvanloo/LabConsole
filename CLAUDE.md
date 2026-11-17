@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.4.0), then confirm all 26 files are present:
+Check `VERSION` at the repo root (should read 1.4.0), then confirm all 28 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (26 files):
+Expected file manifest (28 files):
 
 ```
 ./CLAUDE.md
@@ -47,6 +47,8 @@ Expected file manifest (26 files):
 ./config.example.json
 ./lab-console.service
 ./mockups/fleet-cycle-mockup.html
+./mockups/fleet-layout-mockup.html
+./mockups/large-panel-options-mockup.html
 ./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
@@ -214,7 +216,13 @@ mockup round:
 - Panels are dark navy CRT bezels with rounded corners, thin cyan vector line art, subtle
   scanline overlay on the whole app (`#app::after`). Resting/idle animations (radar sweep,
   orbit plot, spectrum scan) are ambient only — they carry no data meaning, don't wire real
-  values into them.
+  values into them. The **progress reticle** is the exception by design: on the two-across
+  layout, printing/paused/ERROR status faces show `reticle()` (open arc, stepped segments) with
+  the real percent, amber/violet/red by state; it's CSS-hidden elsewhere, where the small
+  wedge shows instead (`mockups/large-panel-options-mockup.html`, option C).
+- The detail view's way back is deliberately prominent: the lit `◂ FLEET OVERVIEW` header
+  button, a fixed `▦ FLEET` corner button for touch screens, and Esc (ignored while a modal is
+  open so it can't skip past a stop confirmation) — option D2 of the same mockup.
 - The docs site (`static/docs/`) intentionally reuses live component markup/CSS from the
   console (see `.figpanel` in `docs.css`, driven by `figs.js`) rather than static screenshots,
   specifically so documentation can't drift out of sync with the real UI. Keep it that way —

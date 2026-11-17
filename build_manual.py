@@ -271,6 +271,15 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "for one printer at a time \u2014 the live camera slot. A panel is never more than "
             "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
+          P("On a wide screen, such as a fullscreen lab display, panels are laid out two across "
+            "and two rows fill the screen, so each panel takes about a quarter of the display, "
+            "with text and meters scaled to match. A third printer sits bottom-left, leaving the "
+            "slot for a fourth; a fifth or more scrolls to a third row. Narrow windows and phones "
+            "fit as many smaller panels across as there is room for."),
+          P("At that size a printing, paused, or ERROR panel also shows a large progress reticle: "
+            "an open arc of segments that fill in steps, with the percentage in the middle \u2014 "
+            "amber while printing, violet when paused, red when an error holds the job. Idle panels "
+            "center their readout instead."),
           Paragraph("02 \u00b7 PRINTER STATES", S["h2"]), rule(),
           StateLegendFig(), Spacer(1, 6)]
     e += ref_table(None, [
@@ -297,7 +306,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                    "The white \u25cf LIVE tag is an indicator, not an alarm \u2014 red is reserved "
                    "exclusively for error signaling. A grey NO SIGNAL tag means liveview is "
                    "unavailable; status and controls still work."),
-          Paragraph("04 \u00b7 CONTROLS", S["h2"]), rule()]
+          Paragraph("04 \u00b7 CONTROLS", S["h2"]), rule(),
+          P("All controls live in the detail console (tap a panel). To return to the fleet, use "
+            "<b>FLEET OVERVIEW</b> at the top left, the <b>FLEET</b> button in the "
+            "bottom-right corner, or press <b>Esc</b>.")]
     e += ref_table(["CONTROL", "BEHAVIOR"], [
         ["\u23f8 PAUSE / \u25b6 RESUME", "Holds or resumes the job; the button swaps by state. Resume also clears a recoverable ERROR (e.g. after feeding filament)."],
         ["\u25a0 STOP", "Aborts the job. Always asks for confirmation first."],
@@ -339,9 +351,13 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
              "(Settings \u2192 Device)."),
           LI("<b>X1-series / H2D only:</b> enable <b>LAN Mode Liveview</b> for the camera "
              "(works in both modes)."),
-          LI("Ask your network administrator for a fixed address (DHCP reservation) per printer "
-             "and set it as <font face='Courier'>ip</font> in config.json. Many school and office "
-             "networks block the announcements discovery relies on."),
+          LI("<b>Optional:</b> a fixed address per printer. Discovery recognizes printers by serial "
+             "and follows them when DHCP hands out a new address, so fixed addresses aren\u2019t "
+             "required (the console has run this way on a school network). Still put each printer\u2019s "
+             "current address in config.json as <font face='Courier'>ip</font>: a correct one connects "
+             "instantly and a stale one is corrected within seconds. Ask for DHCP reservations only if "
+             "discovery can\u2019t see the printers: an \u2018SSDP listener \u2026 unavailable\u2019 log "
+             "warning, or a panel stuck OFFLINE after its printer\u2019s address changes."),
           Spacer(1, 4),
           *callout("warn", "\u25c8 NETWORK REQUIREMENT",
                    "The console host must be able to open connections to each printer. Wi-Fi "

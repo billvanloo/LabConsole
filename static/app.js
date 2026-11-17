@@ -127,6 +127,29 @@ function wedge(cv, pct, col) {
   c.globalAlpha = 1; c.strokeStyle = col; c.beginPath(); c.moveTo(cx, cy);
   c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.closePath(); c.stroke();
 }
+/* Open-arc progress reticle shown on large status faces (mockups/large-panel-options-mockup.html,
+   option C). Same vocabulary as the print-complete sequence: tapered segments on an open arc,
+   filled in steps rather than eased. Static: redrawn when the status face re-renders. */
+function reticle(cv, pct, col, label) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 4;
+  const N = 30, a0 = Math.PI * 0.75, span = Math.PI * 1.5, lit = Math.round(pct / 100 * N);
+  for (let i = 0; i < N; i++) {
+    const s = a0 + span * i / N + 0.012, e = a0 + span * (i + 1) / N - 0.012;
+    const ro = R, ri = R * (i % 5 === 4 ? 0.74 : 0.80);
+    c.beginPath(); c.arc(cx, cy, ro, s, e); c.arc(cx, cy, ri, e, s, true); c.closePath();
+    c.fillStyle = i < lit ? col : GR; c.globalAlpha = i < lit ? 0.9 : 0.55; c.fill();
+  }
+  c.globalAlpha = 1; c.strokeStyle = GR; c.lineWidth = 1;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span); c.stroke();
+  c.strokeStyle = col; c.globalAlpha = .5;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span * pct / 100); c.stroke(); c.globalAlpha = 1;
+  c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `${Math.round(R * 0.42)}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(pct + "%", cx, cy - R * 0.04);
+  c.fillStyle = "#5f7ea6"; c.font = `${Math.max(8, Math.round(R * 0.09))}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(label, cx, cy + R * 0.32);
+}
 function camDemo(cv) {
   const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
   loop(cv, () => {
@@ -349,6 +372,9 @@ function mountAnims(root) {
   });
   root.querySelectorAll("canvas.wedge").forEach(cv =>
     wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
+  // only drawn where CSS shows it (the two-across layout); a hidden canvas measures 0 and skips
+  root.querySelectorAll("canvas.reticle").forEach(cv =>
+    reticle(cv, +cv.dataset.pct || 0, { al: AL, vi: VI }[cv.dataset.col] || AM, cv.dataset.label));
 }
 
 /* ================= helpers ================= */
@@ -385,6 +411,7 @@ function faceStatus(p) {
         <canvas class="wedge" data-pct="${pct}" width="34" height="34" style="width:34px;height:34px"></canvas>
         <div class="pbar"><i style="width:${pct}%"></i></div><span class="ppct">${pct}%</span>
       </div>
+      <canvas class="reticle" data-pct="${pct}" ${s === "paused" ? 'data-col="vi" data-label="PAUSED"' : 'data-label="COMPLETE"'}></canvas>
       <span class="facechip">STATUS</span>`;
   }
   if (s === "error") {
@@ -400,6 +427,7 @@ function faceStatus(p) {
         <div class="pbar errbar"><i style="width:${pct}%"></i></div>
         <span class="ppct" style="color:var(--alert)">${pct}%</span>
       </div>
+      <canvas class="reticle" data-pct="${pct}" data-col="al" data-label="HELD"></canvas>
       <span class="facechip">STATUS</span>`;
   }
   if (s === "offline") {
@@ -576,7 +604,7 @@ function renderDetail(full) {
          <span class="camtag rec">LIVE · ${p.camera === "chamber" ? "CHAMBER ~1FPS" : "RTSPS"}</span>`;
     elDetail.innerHTML = `
       <div class="dhead">
-        <button class="backbtn" id="back">◂ FLEET</button>
+        <button class="backbtn" id="back">◂ FLEET OVERVIEW</button>
         <span class="lamp ${p.state}"></span>
         <span style="color:var(--cyan)">${esc(p.name)}</span>
         <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${esc(p.model)}</span>
@@ -593,8 +621,10 @@ function renderDetail(full) {
           </div>
         </div>
         <div class="dblock"><div class="dcrt" id="telem"></div></div>
-      </div>`;
+      </div>
+      <button class="fleetfab" id="fab" title="Back to the fleet overview (Esc)">▦ FLEET</button>`;
     document.getElementById("back").onclick = closeDetail;
+    document.getElementById("fab").onclick = closeDetail;
     document.getElementById("btn-stop").onclick = () => confirmStop(p.id);
     document.getElementById("btn-start").onclick = () => startPrintModal(p.id);
     document.getElementById("btn-light").onclick = () => {
@@ -635,6 +665,9 @@ function renderDetail(full) {
 }
 
 /* ================= modals ================= */
+addEventListener("keydown", e => {
+  if (e.key === "Escape" && currentView.name === "detail" && !pendingModal) closeDetail();
+});
 function closeModal() { pendingModal?.remove(); pendingModal = null; }
 function confirmStop(id) {
   const p = fleet.find(x => x.id === id); if (!p) return;

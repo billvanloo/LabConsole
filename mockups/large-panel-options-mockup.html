@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Console — Large Panel Options Mockup</title>
+<!-- APPROVED: status face option C (reticle) and fleet button option D2, ported to
+     static/app.js and static/style.css. Mockup for review: options for the empty space in large status faces, and for a more
+     prominent way back to the fleet from the detail view. CSS above the PROPOSALS marker and
+     the canvas instruments are copied verbatim from static/style.css and static/app.js.
+     Open fullscreen to judge the status faces at the size the lab display shows them. -->
+<style>
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+.phead .pname{color:var(--cyan)}
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+/* Wide, tall screens (a fullscreen lab display): two panels across, and two rows fill
+   the screen, so a 3-4 printer fleet gets about a quarter of the display per panel. A 3rd
+   printer sits bottom-left, keeping the slot a 4th will fill; a 5th+ scrolls to a third
+   row. Type and meters scale with the panel through container units, so the readout
+   carries across the room. Narrow windows and phones keep the auto-fit grid above.
+   Approved in mockups/fleet-layout-mockup.html (option A). */
+@media (min-width:1000px) and (min-height:560px){
+  #fleet{container-type:size}
+  #fleet .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc((100cqh - 36px) / 2)}
+  #fleet .ppanel{display:flex}
+  #fleet .ppanel .crt{flex:1;min-height:0;container-type:inline-size}
+  #fleet .phead{font-size:clamp(11px,1.45cqw,16px);padding:1.3cqw 1.6cqw .9cqw;gap:1cqw}
+  #fleet .phead .lamp{width:clamp(9px,1.3cqw,15px);height:clamp(9px,1.3cqw,15px)}
+  #fleet .phead .pmodel{font-size:clamp(9px,1.1cqw,13px)}
+  #fleet .pbody{padding:1.2cqw 2.2cqw 1.8cqw;gap:clamp(7px,1.3cqw,16px)}
+  #fleet .statword{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .fname{font-size:clamp(11px,2.1cqw,22px)}
+  #fleet .kv,#fleet .errline{font-size:clamp(10px,1.8cqw,19px)}
+  #fleet .progrow{gap:1.6cqw}
+  #fleet .pbar{height:clamp(10px,1.7cqw,18px)}
+  #fleet .ppct{font-size:clamp(12px,2.8cqw,30px)}
+  /* the markup pins the wedge at 34px; wedge() sizes its drawing from the CSS box */
+  #fleet canvas.wedge{width:clamp(34px,6.5cqw,72px)!important;height:clamp(34px,6.5cqw,72px)!important}
+  #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
+  #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
+  #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+.camtag.dim{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+/* ---------- detail view ---------- */
+#detail{flex:1;display:flex;flex-direction:column;overflow:auto}
+.dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
+  letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
+.dhead .lamp{width:9px;height:9px;border-radius:50%}
+.backbtn{border:1px solid #1c2a4a;background:none;color:var(--text-dim);
+  font-family:inherit;font-size:10px;letter-spacing:.2em;padding:5px 10px;border-radius:3px;cursor:pointer}
+.dstate{margin-left:auto;font-size:11px;color:var(--amber)}
+.detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
+@media (max-width:720px){.detailgrid{grid-template-columns:1fr}}
+.dblock{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:14px;padding:8px}
+.dcrt{position:relative;background:var(--panel-deep);border-radius:9px;
+  border:1px solid #0d1526;overflow:hidden}
+.dcrt.cam{min-height:250px;display:flex;align-items:center;justify-content:center}
+.dcrt.cam img{width:100%;height:250px;object-fit:contain;background:#04060c}
+.telem{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#101c36}
+.tcell{background:var(--panel-deep);padding:10px 12px}
+.tcell .tl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-bottom:5px}
+.tcell .tv{font-size:17px;color:var(--cyan)}
+.tcell .tv small{font-size:10px;color:var(--text-dim)}
+.tcell .tv.warm{color:var(--amber)}
+.tcell .tv.file{font-size:11px;line-height:1.5;word-break:break-all}
+.amslbl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);padding:10px 12px 0}
+.ams{display:flex;gap:8px;padding:10px 12px;background:var(--panel-deep)}
+.slot{flex:1;border:1px solid #1c2a4a;border-radius:4px;padding:7px 8px;
+  font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.slot i{display:block;height:5px;border-radius:2px;margin-bottom:6px;background:#2a3247}
+.hmsbox{padding:10px 12px;font-size:10px;color:#ffb49b;line-height:1.6;background:var(--panel-deep)}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.cbtn{font-family:inherit;font-size:11px;letter-spacing:.25em;padding:13px 6px;
+  border-radius:6px;cursor:pointer;background:rgba(63,216,255,.05);
+  border:1px solid var(--cyan-dim);color:var(--cyan)}
+.cbtn:disabled{opacity:.3;cursor:default}
+.cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
+.cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
+.cbtn.wide{grid-column:1/-1;border-style:dashed}
+
+/* ---------- modals ---------- */
+.dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;
+  align-items:center;justify-content:center;z-index:50}
+.modal{width:min(440px,92%);background:var(--bezel);border:1px solid #3a1c12;
+  border-radius:12px;padding:8px;box-shadow:0 0 30px rgba(255,90,42,.15)}
+.modal .inner{border:1px solid #2a1108;border-radius:8px;background:var(--panel-deep);padding:18px}
+.modal h3{font-size:13px;letter-spacing:.3em;color:var(--alert);margin-bottom:10px}
+.modal p{font-size:11px;color:#9fb4d2;line-height:1.6;margin-bottom:16px;word-break:break-word}
+.modal .row{display:flex;gap:8px}
+.modal.cyanline{border-color:#1c2a4a;box-shadow:0 0 30px rgba(63,216,255,.1)}
+.modal.cyanline .inner{border-color:#14203d}
+.modal.cyanline h3{color:var(--cyan)}
+.flist{list-style:none;margin-bottom:14px;border:1px solid #14203d;border-radius:4px;
+  max-height:180px;overflow:auto}
+.flist li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;
+  font-size:10.5px;border-bottom:1px solid #0e1830;color:#bfe9ff;cursor:pointer}
+.flist li span{color:var(--text-dim)}
+.flist li.sel{background:rgba(63,216,255,.08);outline:1px solid var(--cyan-dim)}
+.flist li.empty{color:var(--text-dim);cursor:default;justify-content:center}
+.upl{border:1px dashed #1c2a4a;border-radius:4px;text-align:center;color:var(--text-dim);
+  font-size:10px;letter-spacing:.2em;padding:12px;margin-bottom:14px;cursor:pointer}
+.upl.busy{color:var(--amber);border-color:#8c5a1e}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:var(--bezel);border:1px solid var(--cyan-dim);color:var(--cyan);
+  font-size:10px;letter-spacing:.2em;padding:9px 16px;border-radius:6px;z-index:60;
+  box-shadow:0 0 18px rgba(63,216,255,.15)}
+.toast.err{border-color:#8c2c12;color:var(--alert)}
+.hidden{display:none !important}
+
+
+/* ======================= PROPOSALS (only under the 2-across layout) ======================= */
+@media (min-width:1000px) and (min-height:560px){
+  /* A · CENTERED: readout and progress row sit together in the middle of the panel */
+  body.face-a #fleet .pbody{justify-content:center}
+  body.face-a #fleet .progrow{margin-top:clamp(14px,3cqw,44px)}
+
+  /* B · LARGER: the same readout at a size that fills the panel; progress stays at the foot */
+  body.face-b #fleet .pbody{gap:clamp(7px,1.6cqw,22px)}
+  body.face-b #fleet .statword{font-size:clamp(15px,6cqw,64px)}
+  body.face-b #fleet .fname{font-size:clamp(11px,3cqw,32px)}
+  body.face-b #fleet .kv,body.face-b #fleet .errline{font-size:clamp(10px,2.8cqw,30px)}
+  body.face-b #fleet .pbar{height:clamp(10px,3cqw,30px)}
+  body.face-b #fleet .ppct{font-size:clamp(12px,4.6cqw,48px)}
+  body.face-b #fleet canvas.wedge{width:clamp(34px,9cqw,96px)!important;height:clamp(34px,9cqw,96px)!important}
+
+  /* C · RETICLE: readout left, a large open-arc progress reticle right, bar along the foot */
+  body.face-c #fleet .pbody.withret{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  body.face-c #fleet .withret>.statword,body.face-c #fleet .withret>.fname,
+  body.face-c #fleet .withret>.kv,body.face-c #fleet .withret>.errline{grid-column:1}
+  body.face-c #fleet .withret>canvas.reticle{grid-column:2;grid-row:1 / 6;align-self:center;
+    width:min(40cqw,100%);aspect-ratio:1;height:auto}
+  body.face-c #fleet .withret>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  body.face-c #fleet .pbody:not(.withret){justify-content:center}
+}
+/* narrow fallback: the reticle is hidden and the panel looks as it does today */
+canvas.reticle{display:none}
+@media (min-width:1000px) and (min-height:560px){ body.face-c canvas.reticle{display:block} }
+
+/* ---- fleet button options (detail view header) ---- */
+body.back-d1 .backbtn,body.back-d2 .backbtn{font-size:13px;letter-spacing:.25em;padding:11px 20px;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+body.back-d1 .backbtn:hover,body.back-d2 .backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{display:none}
+body.back-d2 .fleetfab{display:flex;position:fixed;right:18px;bottom:18px;z-index:20;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetbar{display:none}
+body.back-d3 .fleetbar{display:block;position:sticky;bottom:0;margin-top:auto;width:100%;font-family:inherit;
+  font-size:13px;letter-spacing:.35em;padding:16px;cursor:pointer;color:var(--cyan);
+  border:0;border-top:1px solid var(--cyan-dim);background:linear-gradient(180deg,#0a1530,#07102a);
+  box-shadow:0 -6px 18px rgba(0,0,0,.5)}
+
+/* ================= mockup-only review controls (not part of the proposal) ================= */
+.mockctl{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:50;display:flex;flex-wrap:wrap;
+  gap:12px;align-items:center;justify-content:center;background:rgba(6,10,22,.95);border:1px solid #2a3a5c;
+  border-radius:8px;padding:7px 12px;font-size:9px;letter-spacing:.2em;color:var(--text-dim);
+  box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:calc(100vw - 20px)}
+.mockctl .g{display:flex;align-items:center;gap:5px}
+.mockctl b{color:#8fa6c8;font-weight:400;margin-right:3px}
+.mockctl button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);font-family:inherit;
+  font-size:9px;letter-spacing:.15em;padding:4px 8px;border-radius:3px;cursor:pointer}
+.mockctl button.on{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(63,216,255,.08)}
+.mockctl.min>.g,.mockctl.min>.mocknote{display:none}
+.mocknote{flex-basis:100%;font-size:10px;line-height:1.6;letter-spacing:.04em;color:#90a9c8;max-width:1100px;text-align:center}
+body.back-d2 .mockctl{bottom:auto;top:44px}
+
+</style>
+</head>
+<body class="face-cur back-cur">
+<div id="app">
+  <div class="statusbar">
+    <span class="title">LAB CONSOLE</span>
+    <span class="glyphs">⌌⍚⌏ ⍙⌇⍜ ⌈⍑⌋</span>
+    <span class="spacer"></span>
+    <span id="chips"><span class="fleetchip"><span class="dot idle"></span>1 IDLE</span>
+      <span class="fleetchip"><span class="dot print"></span>2 PRINTING</span>
+      <span class="fleetchip"><span class="dot err"></span>1 ERROR</span>
+      <span class="fleetchip"><span class="dot off"></span>0 OFFLINE</span></span>
+    <a class="archlink" href="#">⌘ ARCHIVE</a>
+    <span class="linkstate">LINK OK</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+  <div id="fleet"><div class="grid" id="grid"></div></div>
+  <div id="detail" class="hidden" style="display:none"></div>
+</div>
+<button class="fleetfab" id="fab">▦ FLEET</button>
+
+<div class="mockctl" id="ctl">
+  <div class="mocknote" id="note"></div>
+  <span class="g"><b>STATUS FACE</b><button data-k="face" data-v="cur" class="on">CURRENT</button><button data-k="face" data-v="a">A · CENTERED</button><button data-k="face" data-v="b">B · LARGER</button><button data-k="face" data-v="c">C · RETICLE</button></span>
+  <span class="g"><b>FLEET BUTTON</b><button data-k="back" data-v="cur" class="on">CURRENT</button><button data-k="back" data-v="d1">D1 · HEADER</button><button data-k="back" data-v="d2">D2 · HEADER + CORNER</button><button data-k="back" data-v="d3">D3 · BOTTOM BAR</button></span>
+  <span class="g"><b>VIEW</b><button data-k="view" data-v="fleet" class="on">FLEET</button><button data-k="view" data-v="detail">DETAIL</button></span>
+  <button id="hidebtn">HIDE ▾</button>
+</div>
+
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
+const CYCLE_MS = 8000;
+const REST_KINDS = ["orbit", "radar", "scan"];
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+function radar(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14; let a = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); c.lineWidth = 1;
+    c.strokeStyle = GR;
+    for (let i = 1; i <= 3; i++) { c.beginPath(); c.arc(cx, cy, R * i / 3, 0, 7); c.stroke(); }
+    c.strokeStyle = CY; c.globalAlpha = .9; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
+    c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
+    if (c.createConicGradient) {
+      const g = c.createConicGradient(a, cx, cy);
+      g.addColorStop(0, "rgba(63,216,255,.35)"); g.addColorStop(.12, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
+    }
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);
+    c.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); c.stroke();
+    [[.6, 1.2], [.35, 3.9], [.82, 5.1]].forEach(([rr, aa], i) => {
+      const bl = (Math.sin(Date.now() / 500 + i * 2) + 1) / 2;
+      c.fillStyle = i === 1 ? AL : AM; c.globalAlpha = .3 + bl * .7;
+      c.beginPath(); c.arc(cx + R * rr * Math.cos(aa), cy + R * rr * Math.sin(aa), 2.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+    });
+    a += 0.02;
+  });
+}
+function wedge(cv, pct, col) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 3;
+  c.strokeStyle = GR; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+  c.fillStyle = col; c.globalAlpha = .28; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.fill();
+  c.globalAlpha = 1; c.strokeStyle = col; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.closePath(); c.stroke();
+}
+function camDemo(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.fillStyle = "#050910"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "rgba(63,216,255,.75)"; c.lineWidth = 1;
+    c.strokeRect(w * .2, h * .18, w * .6, h * .66);
+    c.beginPath(); c.moveTo(w * .2, h * .18); c.lineTo(w * .28, h * .08);
+    c.lineTo(w * .72, h * .08); c.lineTo(w * .8, h * .18); c.stroke();
+    const gy = h * .62 + Math.sin(t) * 4;
+    c.strokeStyle = AM; c.beginPath(); c.moveTo(w * .24, gy); c.lineTo(w * .76, gy); c.stroke();
+    c.fillStyle = AM; c.fillRect(w * .24 + ((Math.sin(t * 3) + 1) / 2) * (w * .5), gy - 7, 10, 7);
+    c.strokeStyle = "rgba(63,216,255,.4)"; c.strokeRect(w * .33, h * .66, w * .34, h * .12);
+    c.fillStyle = "rgba(255,255,255,.05)";
+    for (let i = 0; i < 90; i++) c.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4);
+    t += .03;
+  });
+}
+
+/* Open-arc progress reticle for option C. Same vocabulary as the approved print-complete
+   sequence: tapered segments on an open arc, filled in steps rather than eased. */
+function reticle(cv, pct, col, label) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 4;
+  const N = 30, a0 = Math.PI * 0.75, span = Math.PI * 1.5, lit = Math.round(pct / 100 * N);
+  for (let i = 0; i < N; i++) {
+    const s = a0 + span * i / N + 0.012, e = a0 + span * (i + 1) / N - 0.012;
+    const ro = R, ri = R * (i % 5 === 4 ? 0.74 : 0.80);
+    c.beginPath(); c.arc(cx, cy, ro, s, e); c.arc(cx, cy, ri, e, s, true); c.closePath();
+    c.fillStyle = i < lit ? col : GR; c.globalAlpha = i < lit ? 0.9 : 0.55; c.fill();
+  }
+  c.globalAlpha = 1; c.strokeStyle = GR; c.lineWidth = 1;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span); c.stroke();
+  c.strokeStyle = col; c.globalAlpha = .5;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span * pct / 100); c.stroke(); c.globalAlpha = 1;
+  c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `${Math.round(R * 0.42)}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(pct + "%", cx, cy - R * 0.04);
+  c.fillStyle = "#5f7ea6"; c.font = `${Math.max(8, Math.round(R * 0.09))}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(label, cx, cy + R * 0.32);
+}
+
+const FLEET = [
+  { id: "panda", name: "Panda X1C", model: "X1C", state: "printing", file: "phone_case_v4.3mf", layer: 61, total: 112, nozzle: 220, bed: 55, eta: "38M", pct: 54 },
+  { id: "lemur", name: "Lemur X1C", model: "X1C", state: "printing", file: "cable_clip_x12.3mf", layer: 11, total: 286, nozzle: 220, bed: 55, eta: "1H 48M", pct: 17 },
+  { id: "elephant", name: "Elephant H2D", model: "H2D", state: "error", pct: 37 },
+  { id: "bay4", name: "Bay 4 A1", model: "A1", state: "idle", file: "keychain.3mf", nozzle: 27, bed: 26 },
+];
+const opt = { face: "cur", back: "cur", view: "fleet" };
+
+function statusHTML(p) {
+  const ret = opt.face === "c";
+  if (p.state === "printing") return `
+    <div class="statword printing">PRINTING</div>
+    <div class="fname">${p.file}</div>
+    <div class="kv"><span>LAYER</span><b>${p.layer} / ${p.total}</b></div>
+    <div class="kv"><span>NOZZLE / BED</span><b class="warm">${p.nozzle}° / ${p.bed}°</b></div>
+    <div class="kv"><span>TIME LEFT</span><b class="warm">${p.eta}</b></div>
+    ${ret ? `<canvas class="reticle" data-pct="${p.pct}" data-label="COMPLETE"></canvas>` : ""}
+    <div class="progrow">
+      ${ret ? "" : `<canvas class="wedge" data-pct="${p.pct}" width="34" height="34" style="width:34px;height:34px"></canvas>`}
+      <div class="pbar"><i style="width:${p.pct}%"></i></div><span class="ppct">${p.pct}%</span>
+    </div>
+    <span class="facechip">STATUS</span>`;
+  if (p.state === "error") return `
+    <div class="statword error">ERROR</div>
+    <div class="errline">HMS 0300-0200-0001-0001<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
+    <div class="kv"><span>JOB HELD AT</span><b>${p.pct}%</b></div>
+    ${ret ? `<canvas class="reticle" data-pct="${p.pct}" data-col="al" data-label="HELD"></canvas>` : ""}
+    <div class="progrow">
+      ${ret ? "" : `<canvas class="wedge" data-pct="${p.pct}" data-col="al" width="34" height="34" style="width:34px;height:34px"></canvas>`}
+      <div class="pbar errbar"><i style="width:${p.pct}%"></i></div>
+      <span class="ppct" style="color:var(--alert)">${p.pct}%</span>
+    </div>
+    <span class="facechip">STATUS</span>`;
+  return `
+    <div class="statword idle">IDLE</div>
+    <div class="kv"><span>NOZZLE / BED</span><b>${p.nozzle}° / ${p.bed}°</b></div>
+    <div class="kv"><span>LAST JOB</span><b>${p.file}</b></div>
+    <div class="kv"><span>READY</span><b class="warm">AWAITING ASSIGNMENT</b></div>
+    <span class="facechip">STATUS</span>`;
+}
+function mount(root) {
+  root.querySelectorAll("canvas[data-anim]").forEach(cv => ({ radar, camdemo: camDemo })[cv.dataset.anim]?.(cv));
+  root.querySelectorAll("canvas.wedge").forEach(cv => wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
+  root.querySelectorAll("canvas.reticle").forEach(cv => reticle(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM, cv.dataset.label));
+}
+const grid = document.getElementById("grid"), detail = document.getElementById("detail"), fleetEl = document.getElementById("fleet");
+function renderFleet() {
+  grid.innerHTML = "";
+  FLEET.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "ppanel" + (p.state === "error" ? " error" : "");
+    el.innerHTML = `<div class="crt"><div class="phead"><span class="lamp ${p.state}"></span><span class="pname">${p.name}</span><span class="pmodel">${p.model}</span></div>
+      <div class="pbody${opt.face === "c" && p.state !== "idle" ? " withret" : ""}">${statusHTML(p)}</div></div>`;
+    el.onclick = () => setView("detail");
+    grid.appendChild(el);
+  });
+  mount(grid);
+}
+function renderDetail() {
+  const p = FLEET[0];
+  const label = opt.back === "cur" ? "◂ FLEET" : "◂ FLEET OVERVIEW";
+  detail.innerHTML = `
+    <div class="dhead">
+      <button class="backbtn" id="back">${label}</button>
+      <span class="lamp ${p.state}"></span>
+      <span style="color:var(--cyan)">${p.name}</span>
+      <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${p.model}</span>
+      <span class="dstate">PRINTING · ${p.pct}%</span>
+    </div>
+    <div class="detailgrid">
+      <div class="dblock">
+        <div class="dcrt cam"><canvas class="bganim" data-anim="camdemo" style="width:100%;height:250px"></canvas>
+          <span class="camtag rec">LIVE · RTSPS</span></div>
+        <div class="ctrls">
+          <button class="cbtn warn">⏸ PAUSE</button><button class="cbtn stop">■ STOP</button>
+          <button class="cbtn">☼ LIGHT</button><button class="cbtn wide" disabled>▲ START PRINT…</button>
+        </div>
+      </div>
+      <div class="dblock"><div class="dcrt"><div class="telem">
+        <div class="tcell"><div class="tl">FILE</div><div class="tv file">${p.file}</div></div>
+        <div class="tcell"><div class="tl">TIME LEFT</div><div class="tv warm">${p.eta}</div></div>
+        <div class="tcell"><div class="tl">LAYER</div><div class="tv">${p.layer}<small> / ${p.total}</small></div></div>
+        <div class="tcell"><div class="tl">SPEED</div><div class="tv">STANDARD</div></div>
+        <div class="tcell"><div class="tl">NOZZLE</div><div class="tv warm">220°<small> / 220°</small></div></div>
+        <div class="tcell"><div class="tl">BED</div><div class="tv warm">55°<small> / 55°</small></div></div>
+        <div class="tcell"><div class="tl">CHAMBER</div><div class="tv">31°</div></div>
+        <div class="tcell"><div class="tl">PART FAN</div><div class="tv">100<small>%</small></div></div>
+      </div>
+      <div class="amslbl">AMS · 4 SLOTS</div>
+      <div class="ams"><div class="slot"><i style="background:#c8c8c8"></i>PLA</div><div class="slot"><i style="background:#1f6fd1"></i>PLA</div>
+        <div class="slot"><i></i>TPU-AMS</div><div class="slot"><i></i>PLA</div></div></div></div>
+    </div>
+    <button class="fleetbar" id="bar">◂ RETURN TO FLEET OVERVIEW</button>`;
+  document.getElementById("back").onclick = () => setView("fleet");
+  document.getElementById("bar").onclick = () => setView("fleet");
+  mount(detail);
+}
+document.getElementById("fab").onclick = () => setView("fleet");
+addEventListener("keydown", e => { if (e.key === "Escape" && opt.view === "detail") setView("fleet"); });
+
+const NOTES = {
+  cur: "STATUS FACE · CURRENT: the readout sits at the top and the progress row at the foot, leaving an empty band between them.",
+  a: "STATUS FACE · A · CENTERED: same sizes as now; the readout and progress row move together to the middle. Smallest change, but the panel still reads as mostly empty.",
+  b: "STATUS FACE · B · LARGER: the same readout at roughly 1.6x the size, filling the panel; progress stays along the foot. Easiest to read from across the room; no new elements.",
+  c: "STATUS FACE · C · RETICLE: readout on the left, a large open-arc progress reticle on the right (stepped segments, the print-complete sequence's vocabulary). Amber while printing, red when held by an error; idle panels center their readout. Most visual, and progress is legible from furthest away.",
+};
+const BACK = {
+  cur: "FLEET BUTTON · CURRENT: a small dim outline button in the header corner.",
+  d1: "FLEET BUTTON · D1 · HEADER: same place, about twice the size, lit cyan, labelled FLEET OVERVIEW.",
+  d2: "FLEET BUTTON · D2: D1 plus a large FLEET button fixed in the bottom-right corner, within thumb reach on a touch screen.",
+  d3: "FLEET BUTTON · D3: a full-width RETURN TO FLEET OVERVIEW bar along the bottom of the detail view.",
+};
+function note() {
+  const t = opt.view === "fleet" ? NOTES[opt.face] : BACK[opt.back];
+  document.getElementById("note").textContent = t + " All options: the Esc key also returns to the fleet (try it here).";
+}
+function setView(v) {
+  opt.view = v;
+  document.querySelectorAll('#ctl [data-k="view"]').forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  const det = v === "detail";
+  fleetEl.style.display = det ? "none" : ""; detail.style.display = det ? "flex" : "none";
+  detail.classList.toggle("hidden", !det);
+  document.getElementById("fab").style.visibility = det ? "visible" : "hidden";
+  if (det) renderDetail(); else renderFleet();
+  note();
+}
+document.querySelectorAll("#ctl [data-k]").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.k;
+  document.querySelectorAll(`#ctl [data-k="${k}"]`).forEach(x => x.classList.toggle("on", x === b));
+  opt[k] = b.dataset.v;
+  document.body.className = `face-${opt.face} back-${opt.back}`;
+  if (k === "face" && opt.view !== "fleet") opt.view = "fleet";
+  if (k === "back" && opt.view !== "detail") opt.view = "detail";
+  setView(opt.view);
+}));
+document.getElementById("hidebtn").onclick = e => {
+  const c = document.getElementById("ctl"); c.classList.toggle("min");
+  e.target.textContent = c.classList.contains("min") ? "MOCKUP CONTROLS ▴" : "HIDE ▾";
+};
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => setView(opt.view), 150); });
+setInterval(() => { document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8); }, 1000);
+setView("fleet");
+</script>
+</body>
+</html>

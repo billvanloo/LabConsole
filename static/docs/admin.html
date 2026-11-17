@@ -54,7 +54,7 @@
       <li><b>LAN Only + Developer Mode only</b>: switch to <b>LAN Only Mode</b> and enable <b>Developer Mode</b> (Settings → General/Network). Skip this step for cloud mode.</li>
       <li>Record the <b>Access Code</b> (Settings → Network) and <b>Serial Number</b> (Settings → Device).</li>
       <li><b>X1-series / H2D only</b>: enable <b>LAN Mode Liveview</b> so the RTSPS camera stream is available. This setting works in both modes.</li>
-      <li>Ask your network administrator for a fixed address (DHCP reservation) for each printer and put it in <code>config.json</code> as <code>ip</code>. Discovery can find printers that move, but many school and office networks block the announcements it relies on.</li>
+      <li><b>Optional:</b> a fixed address per printer. Discovery recognizes each printer by its serial number and follows it when DHCP hands it a new address, so fixed addresses aren&rsquo;t required, and the console has run this way on a school network. Putting each printer&rsquo;s current address in <code>config.json</code> as <code>ip</code> is still worth doing: a correct address connects instantly, and a stale one is corrected by discovery within a few seconds. Ask your network administrator for DHCP reservations only if discovery can&rsquo;t see the printers. Signs of that are a <code>SSDP listener … unavailable</code> warning in the log, or a panel that stays OFFLINE after its printer gets a new address.</li>
     </ol>
     <div class="callout warn">
       <div class="ct">◈ NETWORK REQUIREMENT</div>
