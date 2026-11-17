@@ -96,7 +96,22 @@ body{background:var(--bg);color:var(--cyan);
   #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
   #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
   #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+
+  /* status faces with progress get a large open-arc reticle beside the readout, filling the
+     band that otherwise sits empty at this size (option C of
+     mockups/large-panel-options-mockup.html). The reticle replaces the small wedge here. */
+  #fleet .pbody:has(>canvas.reticle){display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  #fleet .pbody:has(>canvas.reticle)>:is(.statword,.fname,.kv,.errline){grid-column:1}
+  #fleet .pbody>canvas.reticle{display:block;grid-column:2;grid-row:1 / 6;align-self:center;
+    width:min(40cqw,100%);aspect-ratio:1;height:auto}
+  #fleet .pbody:has(>canvas.reticle)>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  #fleet .pbody:has(>canvas.reticle) canvas.wedge{display:none}
+  /* idle faces have no progress to show: center their readout instead */
+  #fleet .pbody:has(>.statword.idle){justify-content:center}
 }
+/* outside the two-across layout the reticle stays hidden and the small wedge does the job */
+canvas.reticle{display:none}
 
 .statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
 .statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
@@ -128,8 +143,17 @@ body{background:var(--bg);color:var(--cyan);
 .dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
   letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
 .dhead .lamp{width:9px;height:9px;border-radius:50%}
-.backbtn{border:1px solid #1c2a4a;background:none;color:var(--text-dim);
-  font-family:inherit;font-size:10px;letter-spacing:.2em;padding:5px 10px;border-radius:3px;cursor:pointer}
+/* the way back to the fleet is lit and sized to find at a glance, plus a corner button in
+   thumb reach on a touch screen; Esc also works (mockups/large-panel-options-mockup.html, D2) */
+.backbtn{font-family:inherit;font-size:13px;letter-spacing:.25em;padding:11px 20px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+.backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetfab:hover{background:rgba(14,26,52,.95)}
 .dstate{margin-left:auto;font-size:11px;color:var(--amber)}
 .detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
 @media (max-width:720px){.detailgrid{grid-template-columns:1fr}}

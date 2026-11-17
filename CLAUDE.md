@@ -216,7 +216,13 @@ mockup round:
 - Panels are dark navy CRT bezels with rounded corners, thin cyan vector line art, subtle
   scanline overlay on the whole app (`#app::after`). Resting/idle animations (radar sweep,
   orbit plot, spectrum scan) are ambient only — they carry no data meaning, don't wire real
-  values into them.
+  values into them. The **progress reticle** is the exception by design: on the two-across
+  layout, printing/paused/ERROR status faces show `reticle()` (open arc, stepped segments) with
+  the real percent, amber/violet/red by state; it's CSS-hidden elsewhere, where the small
+  wedge shows instead (`mockups/large-panel-options-mockup.html`, option C).
+- The detail view's way back is deliberately prominent: the lit `◂ FLEET OVERVIEW` header
+  button, a fixed `▦ FLEET` corner button for touch screens, and Esc (ignored while a modal is
+  open so it can't skip past a stop confirmation) — option D2 of the same mockup.
 - The docs site (`static/docs/`) intentionally reuses live component markup/CSS from the
   console (see `.figpanel` in `docs.css`, driven by `figs.js`) rather than static screenshots,
   specifically so documentation can't drift out of sync with the real UI. Keep it that way —
