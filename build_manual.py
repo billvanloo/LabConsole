@@ -271,6 +271,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "for one printer at a time \u2014 the live camera slot. A panel is never more than "
             "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
+          P("On a wide screen, such as a fullscreen lab display, panels are laid out two across "
+            "and two rows fill the screen, so each panel takes about a quarter of the display, "
+            "with text and meters scaled to match. A third printer sits bottom-left, leaving the "
+            "slot for a fourth; a fifth or more scrolls to a third row. Narrow windows and phones "
+            "fit as many smaller panels across as there is room for."),
           Paragraph("02 \u00b7 PRINTER STATES", S["h2"]), rule(),
           StateLegendFig(), Spacer(1, 6)]
     e += ref_table(None, [
