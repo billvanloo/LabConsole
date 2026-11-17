@@ -23,8 +23,12 @@
       c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
       c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
       if (c.createConicGradient) {
-        const g = c.createConicGradient(a, cx, cy);
-        g.addColorStop(0, "rgba(63,216,255,.35)"); g.addColorStop(.12, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+        // The sweep turns clockwise (a grows), and a conic gradient also runs clockwise from
+        // its start angle, so start it a twelfth of a turn BEHIND the line and brighten up to
+        // it: the glow trails the sweep instead of running ahead of it (issue #4).
+        const TRAIL = .12, g = c.createConicGradient(a - TRAIL * 2 * Math.PI, cx, cy);
+        g.addColorStop(0, "rgba(63,216,255,0)"); g.addColorStop(TRAIL, "rgba(63,216,255,.35)");
+        g.addColorStop(TRAIL + .001, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
         c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
       }
       c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);

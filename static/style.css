@@ -10,7 +10,12 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--cyan);
   font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
   overflow:hidden}
-#app{height:100%;display:flex;flex-direction:column;position:relative}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
 #app::after{content:"";position:fixed;inset:0;pointer-events:none;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
   mix-blend-mode:multiply;opacity:.5}
@@ -112,6 +117,53 @@ body{background:var(--bg);color:var(--cyan);
 }
 /* outside the two-across layout the reticle stays hidden and the small wedge does the job */
 canvas.reticle{display:none}
+
+/* Detail view on a wide, tall screen: fill it. The camera takes the left column above
+   larger controls; the readings fill the right column and scale with it (container
+   units), headed by a progress block with the reticle. Narrow windows keep the layout
+   above, without the block. Approved as option B of mockups/detail-view-mockup.html
+   (issue #6). */
+.dprog{display:none}
+@media (min-width:1000px) and (min-height:560px){
+  #detail .dhead{padding:12px 14px}
+  #detail .dstate{font-size:16px;letter-spacing:.3em}
+  #detail .detailgrid{flex:1;min-height:0;grid-template-columns:1.35fr .65fr;grid-template-rows:minmax(0,1fr)}
+  #detail .dblock{display:flex;flex-direction:column;min-height:0}
+  #detail .dcrt.cam{flex:1;min-height:0}
+  #detail .dcrt.cam canvas,#detail .dcrt.cam img{height:100%!important;width:100%}
+  #detail .camtag{font-size:13px;left:14px;top:12px}
+  #detail .ctrls{gap:10px;padding:14px 4px 4px}
+  #detail .cbtn{font-size:15px;padding:20px 8px}
+  /* the right column stops short of the fixed corner FLEET button */
+  #detail .detailgrid>.dblock:last-child{margin-bottom:78px;container-type:inline-size}
+  #telem{flex:1;min-height:0;display:flex;flex-direction:column}
+  #telem .telem{flex:1;grid-auto-rows:1fr}
+  #telem .tcell{padding:1.6cqw 2.4cqw;display:flex;flex-direction:column;justify-content:center}
+  #telem .tcell .tl{font-size:clamp(9px,1.7cqw,14px);margin-bottom:.8cqw}
+  #telem .tcell .tv{font-size:clamp(17px,4.6cqw,42px)}
+  #telem .tcell .tv small{font-size:clamp(10px,2cqw,18px)}
+  #telem .tcell .tv.file{font-size:clamp(11px,2.6cqw,22px)}
+  #telem .tcell.inprog{display:none}
+  /* five readings left below the block: the last spans the row so no slot sits empty */
+  #telem .telem>.tcell:last-child{grid-column:1 / -1}
+  #telem .amslbl{font-size:clamp(9px,1.5cqw,13px);padding:1.6cqw 2.4cqw 0}
+  #telem .ams{padding:1.4cqw 2.4cqw 2cqw;gap:1.4cqw}
+  #telem .slot{font-size:clamp(9px,1.6cqw,14px);padding:1.2cqw 1.4cqw}
+  #telem .slot i{height:clamp(5px,1cqw,9px);margin-bottom:1cqw}
+  #telem .hmsbox{font-size:clamp(10px,2.4cqw,20px);padding:1.6cqw 2.4cqw}
+  #telem .dprog{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2.6cqw;align-items:center;
+    padding:2cqw 2.4cqw;border-bottom:1px solid #101c36;background:var(--panel-deep)}
+  #telem .dprog.noret{grid-template-columns:1fr}
+  #telem .dprog canvas.reticle{display:block;width:min(34cqw,260px);aspect-ratio:1;height:auto}
+  #telem .dprog .tl{font-size:clamp(9px,1.7cqw,14px);letter-spacing:.25em;color:var(--text-dim);margin:1.2cqw 0 .5cqw}
+  #telem .dprog .tl:first-child{margin-top:0}
+  #telem .dprog .file{font-size:clamp(11px,2.6cqw,22px);color:#bfe9ff;word-break:break-all;line-height:1.35}
+  #telem .dprog .big{font-size:clamp(20px,6cqw,56px);color:var(--amber)}
+  #telem .dprog .big.vi{color:var(--violet)} #telem .dprog .big.al{color:var(--alert)}
+  #telem .dprog .big.idle{color:var(--cyan)} #telem .dprog .big.offline{color:#3a4a66}
+  #telem .dprog .mid{font-size:clamp(14px,3.6cqw,32px);color:var(--cyan)}
+  #telem .dprog .mid small{font-size:.55em;color:var(--text-dim)}
+}
 
 .statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
 .statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}

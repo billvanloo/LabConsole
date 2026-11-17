@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.4.0), then confirm all 28 files are present:
+Check `VERSION` at the repo root (should read 1.4.0), then confirm all 29 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (28 files):
+Expected file manifest (29 files):
 
 ```
 ./CLAUDE.md
@@ -46,6 +46,7 @@ Expected file manifest (28 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./mockups/detail-view-mockup.html
 ./mockups/fleet-cycle-mockup.html
 ./mockups/fleet-layout-mockup.html
 ./mockups/large-panel-options-mockup.html
@@ -219,7 +220,11 @@ mockup round:
   values into them. The **progress reticle** is the exception by design: on the two-across
   layout, printing/paused/ERROR status faces show `reticle()` (open arc, stepped segments) with
   the real percent, amber/violet/red by state; it's CSS-hidden elsewhere, where the small
-  wedge shows instead (`mockups/large-panel-options-mockup.html`, option C).
+  wedge shows instead (`mockups/large-panel-options-mockup.html`, option C). The detail view
+  uses it too: on the same breakpoint it fills the screen, camera left, and the right column
+  opens with a `.dprog` block (reticle + file, time left, layer) whose cells then drop out of
+  the readings grid (`.tcell.inprog`) — `mockups/detail-view-mockup.html`, option B. The
+  reticle there is redrawn on every telemetry push, since `#telem` is rebuilt each time.
 - The detail view's way back is deliberately prominent: the lit `◂ FLEET OVERVIEW` header
   button, a fixed `▦ FLEET` corner button for touch screens, and Esc (ignored while a modal is
   open so it can't skip past a stop confirmation) — option D2 of the same mockup.
