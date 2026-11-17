@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<!-- APPROVED (amber current layer, ghost slots on, bucketing for tall prints); ported to
+     static/app.js and static/style.css in v1.5.0. In the shipped console the stack ALTERNATES
+     with the ambient instruments on a printing panel's animation turns rather than replacing
+     them (owner's call when porting). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Layer Stack — Lab Console Mockup</title>
+<style>
+  :root{
+    --bg:#070b18; --panel-deep:#060d1e; --bezel:#141822; --bezel-edge:#232a38;
+    --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+    --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+    --text-dim:#5f7ea6; --ok:#57e0b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg)}
+  body{color:var(--cyan);
+    font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+    padding-bottom:40px}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+    mix-blend-mode:multiply;opacity:.5}
+
+  /* ---------- control bar ---------- */
+  .bar{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;padding:10px 16px;
+    border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+    font-size:11px;letter-spacing:.2em;position:sticky;top:0;z-index:10}
+  .bar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+  .bar .sub{color:var(--text-dim);font-size:10px;letter-spacing:.3em}
+  .bar .spacer{flex:1}
+  .ctl{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .ctl label{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-right:2px}
+  .ctl button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);
+    font-family:inherit;font-size:10px;letter-spacing:.12em;padding:5px 9px;
+    border-radius:3px;cursor:pointer}
+  .ctl button.on{color:var(--cyan);border-color:var(--cyan-dim);
+    background:rgba(63,216,255,.07);box-shadow:0 0 10px rgba(63,216,255,.12) inset}
+  .scrub{display:flex;align-items:center;gap:8px;padding:8px 16px;
+    border-bottom:1px solid #10182b;background:#060a16;font-size:9px;letter-spacing:.25em;color:var(--text-dim)}
+  .scrub input{flex:1;accent-color:var(--cyan);min-width:120px}
+  .scrub b{color:var(--amber);font-weight:400;min-width:110px;text-align:right}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:16px}
+  .intro{font-size:12px;line-height:1.7;color:#90a9c8;max-width:80ch;margin-bottom:18px}
+  .intro b{color:#d7e6f7}
+
+  .views{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .vlabel{font-size:9px;letter-spacing:.3em;color:var(--text-dim);margin:0 0 7px 2px}
+  .view.small{flex:0 0 auto}
+  .view.big{flex:1 1 520px;min-width:0}
+
+  /* ---------- console panel (mirrors static/style.css) ---------- */
+  .ppanel{position:relative;background:var(--bezel);border:1px solid var(--bezel-edge);
+    border-radius:14px;padding:8px}
+  .crt{position:relative;border-radius:9px;overflow:hidden;
+    background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+    border:1px solid #0d1526;display:flex;flex-direction:column}
+  .small .ppanel{width:330px}
+  .small .crt{height:212px}
+  .big .crt{height:430px}
+  .phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+    font-size:11px;letter-spacing:.18em;position:relative;z-index:3}
+  .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+  .lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+  .lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  @keyframes pulse{50%{opacity:.45}}
+  .pname{color:var(--cyan)}
+  .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto}
+  .pbody{flex:1;position:relative}
+  .pbody canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .readout{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+    letter-spacing:.15em;z-index:2}
+  .readout b{color:var(--cyan);font-weight:400}
+  .bucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+    color:var(--amber);z-index:2}
+  .facechip{position:absolute;right:10px;bottom:7px;font-size:8px;letter-spacing:.3em;color:#33507c;z-index:2}
+  .big .readout{font-size:11px;bottom:10px;left:16px}
+  .big .facechip{font-size:9px;bottom:10px;right:14px}
+  .big .bucket{font-size:9px;right:16px}
+
+  /* ---------- notes ---------- */
+  .notes{margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .note{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:10px;padding:6px}
+  .note .in{background:var(--panel-deep);border:1px solid #0d1526;border-radius:7px;padding:12px 14px;height:100%}
+  .note h3{font-size:10px;letter-spacing:.28em;color:var(--amber);margin-bottom:8px}
+  .note p{font-size:11px;line-height:1.65;color:#9fb4d2}
+  .note p b{color:#d7e6f7;font-weight:600}
+  .note code{color:var(--amber);font-size:10.5px}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="title">LAYER STACK</span>
+  <span class="sub">APPROVED 2026-11-17 · AMBER · GHOST ON · BUCKETED</span>
+  <span class="spacer"></span>
+  <span class="ctl"><label>LAYERS</label>
+    <button data-total="40">40</button><button data-total="120">120</button>
+    <button data-total="230" class="on">230</button><button data-total="600">600</button>
+    <button data-total="1400">1400</button></span>
+  <span class="ctl"><label>SPEED</label>
+    <button data-ms="1500">REAL-ISH</button><button data-ms="250" class="on">FAST</button>
+    <button data-ms="30">FILL</button></span>
+  <span class="ctl"><label>CURRENT</label>
+    <button data-accent="green">GREEN</button><button data-accent="amber" class="on">AMBER</button></span>
+  <span class="ctl"><label>STATE</label>
+    <button data-state="printing" class="on">PRINTING</button><button data-state="paused">PAUSED</button></span>
+  <span class="ctl"><label>GHOST SLOTS</label>
+    <button data-ghost="1" class="on">ON</button><button data-ghost="0">OFF</button></span>
+</div>
+<div class="scrub">
+  <span>SCRUB</span>
+  <input type="range" id="scrub" min="1" max="231" value="1">
+  <b id="scrubval">LAYER 1 / 230</b>
+</div>
+
+<div class="wrap">
+  <p class="intro">
+    Each block is one layer. Completed layers stack <b>bottom-up, left to right</b> as glowing
+    cyan blocks; the <b>layer being printed</b> glows and pulses in the alternate color with a
+    dashed outline, as in the sketch. When a layer finishes it flashes and settles into the
+    stack. The dashed rounded rectangle is the whole job: its size is fixed by the total layer
+    count, so the empty space inside shows what's left. Above about 600 layers the blocks
+    would get too small to read, so each block stands for several layers and a chip says so.
+    Try <b>1400</b> to see it.
+  </p>
+
+  <div class="views">
+    <div class="view small">
+      <div class="vlabel">AT PANEL SIZE — 7″ FLEET VIEW</div>
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp printing" data-lamp></span>
+          <span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+        <div class="pbody" data-stack>
+          <canvas></canvas>
+          <span class="readout" data-readout></span>
+          <span class="bucket" data-bucket></span>
+          <span class="facechip">LAYER STACK</span>
+        </div>
+      </div></div>
+    </div>
+    <div class="view big">
+      <div class="vlabel">ENLARGED — SAME CODE, FOR INSPECTION</div>
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp printing" data-lamp></span>
+          <span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+        <div class="pbody" data-stack>
+          <canvas></canvas>
+          <span class="readout" data-readout></span>
+          <span class="bucket" data-bucket></span>
+          <span class="facechip">LAYER STACK</span>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><div class="in">
+      <h3>CHOICE 1 · CURRENT-LAYER COLOR</h3>
+      <p><b>Green</b> follows the sketch and stands out against the cyan stack. <b>Amber</b>
+      is already the console's "printing" color, so it would match the panel lamp and add no
+      new color meaning. While paused, the current block turns violet and stops pulsing, to
+      match the paused lamp.</p>
+    </div></div>
+    <div class="note"><div class="in">
+      <h3>CHOICE 2 · ONE BLOCK PER LAYER, OR BUCKETS</h3>
+      <p>It stays one block per layer until blocks would fall below about 7&nbsp;px on the 7″
+      panel; past that, each block covers several layers and the <b>1 BLOCK = N LAYERS</b>
+      chip appears. Fine-detail prints at 0.08&nbsp;mm can pass 1,000 layers, so some
+      fallback is needed. The other option is to always use one block per layer and accept
+      a fine grain.</p>
+    </div></div>
+    <div class="note"><div class="in">
+      <h3>CHOICE 3 · GHOST SLOTS</h3>
+      <p>Faint outlines mark the layers still to come. They make progress readable from
+      across the room but add visual noise. The sketch doesn't have them. Default on in this
+      mockup; toggle to compare.</p>
+    </div></div>
+    <div class="note"><div class="in">
+      <h3>INTEGRATION NOTES · NO DECISION NEEDED</h3>
+      <p>Layer data only exists while printing or paused, so this face replaces the resting
+      animation in those states only; idle printers keep the radar and orbit. The stack is
+      drawn to a cached canvas and redrawn only when a layer finishes; each frame only
+      redraws the current block and the border, which keeps the Pi&nbsp;3 comfortable.
+      Adopting it means the docs' "resting faces carry no data" line changes.</p>
+    </div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", VI = "#b06cff", GN = "#57e0b8";
+const MIN_PITCH = 7;   // px — smallest block pitch still legible on the 7" panel
+const MAX_PITCH = 34;  // px — cap so short jobs don't render giant blocks
+
+/* ---------------- simulated job ---------------- */
+const S = { total: 230, layer: 1, accent: "amber", state: "printing", ghost: true, ms: 250 };
+const isComplete = () => S.layer > S.total;
+const accentColor = () => S.state === "paused" ? VI : (S.accent === "amber" ? AM : GN);
+
+/* ---------------- layout ---------------- */
+function computeLayout(w, h, total) {
+  const m = { l: 14, r: 14, t: 14, b: 26 }, pad = 7;
+  const aw = w - m.l - m.r - 2 * pad, ah = h - m.t - m.b - 2 * pad;
+  if (aw < 20 || ah < 20) return null;
+  let per = 1, fit = null;
+  for (;;) {
+    const n = Math.ceil(total / per);
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const s = Math.min(aw / cols, ah / rows);
+      if (!best || s > best.s) best = { cols, rows, s, n };
+    }
+    if (best.s >= MIN_PITCH || per >= 64) { fit = { ...best, per }; break; }
+    per++;
+  }
+  const s = Math.min(fit.s, MAX_PITCH);
+  const gw = fit.cols * s, gh = fit.rows * s;
+  const gx = m.l + pad + (aw - gw) / 2, gy = m.t + pad + (ah - gh) / 2;
+  return { ...fit, s, q: s * 0.72, gx, gy, gw, gh,
+           border: { x: gx - pad, y: gy - pad, w: gw + 2 * pad, h: gh + 2 * pad } };
+}
+function blockRect(L, i) {
+  const row = Math.floor(i / L.cols), col = i % L.cols;
+  const off = (L.s - L.q) / 2;
+  return { x: L.gx + col * L.s + off, y: L.gy + L.gh - (row + 1) * L.s + off, q: L.q };
+}
+function rrect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
+}
+
+/* ---------------- one stack instance ---------------- */
+function makeStack(root) {
+  const cv = root.querySelector("canvas");
+  const readout = root.querySelector("[data-readout]");
+  const bucket = root.querySelector("[data-bucket]");
+  let c, w = 0, h = 0, cache, cc, L = null, key = "", doneDrawn = -1;
+  let flash = { i: -1, t: 0 }, lastCur = -1, lastText = "", lastBucket = "";
+
+  function size() {
+    const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    w = r.width; h = r.height;
+    cv.width = Math.max(1, Math.round(w * d)); cv.height = Math.max(1, Math.round(h * d));
+    c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+    cache = document.createElement("canvas");
+    cache.width = cv.width; cache.height = cv.height;
+    cc = cache.getContext("2d"); cc.setTransform(d, 0, 0, d, 0, 0);
+    key = "";
+  }
+  new ResizeObserver(size).observe(cv);
+  size();
+
+  function drawDone(ctx, i) {
+    const b = blockRect(L, i), lw = Math.max(1, b.q * 0.12), r = Math.max(1, b.q * 0.14);
+    ctx.save();
+    ctx.shadowColor = "rgba(63,216,255,.85)";
+    ctx.shadowBlur = Math.max(3, b.q * 0.6);
+    rrect(ctx, b.x, b.y, b.q, b.q, r);
+    ctx.fillStyle = "rgba(63,216,255,.22)"; ctx.fill();
+    ctx.lineWidth = lw; ctx.strokeStyle = CY; ctx.stroke();
+    ctx.restore();
+  }
+  function rebuild(doneBlocks) {
+    cc.clearRect(0, 0, w, h);
+    if (S.ghost) {
+      cc.strokeStyle = "rgba(63,216,255,.11)"; cc.lineWidth = 1;
+      for (let i = doneBlocks; i < L.n; i++) {
+        const b = blockRect(L, i);
+        rrect(cc, b.x + .5, b.y + .5, b.q - 1, b.q - 1, Math.max(1, b.q * 0.14)); cc.stroke();
+      }
+    }
+    for (let i = 0; i < doneBlocks; i++) drawDone(cc, i);
+    doneDrawn = doneBlocks;
+  }
+
+  return function draw(now) {
+    if (w < 10 || h < 10) return;
+    const k = `${w}x${h}|${S.total}|${S.ghost}`;
+    if (k !== key) { L = computeLayout(w, h, S.total); key = k; doneDrawn = -1; lastCur = -1; }
+    if (!L) return;
+
+    const doneLayers = Math.min(S.layer - 1, S.total);
+    const doneBlocks = isComplete() ? L.n : Math.floor(doneLayers / L.per);
+    const cur = isComplete() ? -1 : Math.min(doneBlocks, L.n - 1);
+
+    // cache: incremental when one block completes, full rebuild otherwise
+    if (doneBlocks !== doneDrawn) {
+      if (doneDrawn >= 0 && doneBlocks === doneDrawn + 1) { drawDone(cc, doneDrawn); doneDrawn = doneBlocks; }
+      else rebuild(doneBlocks);
+    }
+    // completion flash when the current block advances by one
+    if (lastCur >= 0 && cur === lastCur + 1) flash = { i: lastCur, t: now };
+    if (isComplete() && lastCur >= 0) flash = { i: lastCur, t: now };
+    lastCur = cur;
+
+    c.clearRect(0, 0, w, h);
+    c.drawImage(cache, 0, 0, w, h);
+
+    // dashed job envelope; dashes march while printing
+    const B = L.border;
+    c.save();
+    rrect(c, B.x, B.y, B.w, B.h, Math.min(12, L.s * 0.9 + 4));
+    c.setLineDash([7, 5]);
+    c.lineDashOffset = S.state === "printing" && !isComplete() ? -(now / 90) % 12 : 0;
+    c.lineWidth = 1.3;
+    c.strokeStyle = isComplete() ? "rgba(63,216,255,.95)" : "rgba(63,216,255,.7)";
+    c.shadowColor = "rgba(63,216,255,.6)"; c.shadowBlur = 6;
+    c.stroke();
+    c.restore();
+
+    // current layer: halo + pulsing fill + dashed outline
+    if (cur >= 0) {
+      const b = blockRect(L, cur), col = accentColor();
+      const pulse = S.state === "paused" ? 0.55 : 0.55 + 0.45 * Math.sin(now / 280);
+      const cx = b.x + b.q / 2, cy = b.y + b.q / 2;
+      c.save();
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, b.q * 1.9);
+      g.addColorStop(0, hexA(col, 0.30 * pulse)); g.addColorStop(1, hexA(col, 0));
+      c.fillStyle = g; c.fillRect(cx - b.q * 2, cy - b.q * 2, b.q * 4, b.q * 4);
+      c.shadowColor = col; c.shadowBlur = 4 + b.q * 1.2 * pulse;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = hexA(col, 0.22 + 0.4 * pulse); c.fill();
+      c.lineWidth = Math.max(1.2, b.q * 0.14); c.strokeStyle = col;
+      if (b.q >= 9) c.setLineDash([Math.max(2, b.q * 0.24), Math.max(1.5, b.q * 0.13)]);
+      c.stroke();
+      c.restore();
+    }
+
+    // completion flash: white, fading to the settled cyan block over 450 ms
+    const dt = now - flash.t;
+    if (flash.i >= 0 && dt < 450) {
+      const b = blockRect(L, flash.i), a = 1 - dt / 450;
+      c.save();
+      c.shadowColor = "#ffffff"; c.shadowBlur = 6 + b.q * a;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = `rgba(255,255,255,${0.75 * a})`; c.fill();
+      c.restore();
+    }
+
+    // overlays — touch the DOM only when text changes
+    const text = isComplete()
+      ? `<b>COMPLETE</b> · ${S.total} LAYERS`
+      : `LAYER <b>${S.layer}</b> / ${S.total} · ${Math.floor(doneLayers / S.total * 100)}%`;
+    if (text !== lastText) { readout.innerHTML = text; lastText = text; }
+    const bt = L.per > 1 ? `1 BLOCK = ${L.per} LAYERS` : "";
+    if (bt !== lastBucket) { bucket.textContent = bt; lastBucket = bt; }
+  };
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+}
+
+/* ---------------- driver ---------------- */
+const stacks = [...document.querySelectorAll("[data-stack]")].map(makeStack);
+const scrub = document.getElementById("scrub"), scrubval = document.getElementById("scrubval");
+let nextAt = 0, holdUntil = 0;
+
+function syncScrub() {
+  scrub.max = S.total + 1; scrub.value = S.layer;
+  scrubval.textContent = isComplete() ? "COMPLETE" : `LAYER ${S.layer} / ${S.total}`;
+}
+function syncLamps() {
+  const cls = isComplete() ? "idle" : S.state;
+  document.querySelectorAll("[data-lamp]").forEach(l => l.className = "lamp " + cls);
+}
+function frame(now) {
+  if (S.state === "printing") {
+    if (isComplete()) {
+      if (!holdUntil) holdUntil = now + 2600;
+      else if (now > holdUntil) { S.layer = 1; holdUntil = 0; nextAt = now + S.ms; syncScrub(); syncLamps(); }
+    } else if (now >= nextAt) {
+      S.layer++; nextAt = now + S.ms; syncScrub(); if (isComplete()) syncLamps();
+    }
+  } else { nextAt = now + S.ms; }
+  stacks.forEach(d => d(now));
+  requestAnimationFrame(frame);
+}
+
+function group(attr, apply) {
+  const btns = document.querySelectorAll(`[data-${attr}]`);
+  btns.forEach(b => b.addEventListener("click", () => {
+    btns.forEach(x => x.classList.remove("on")); b.classList.add("on");
+    apply(b.dataset[attr]); syncScrub(); syncLamps();
+  }));
+}
+group("total", v => { S.total = +v; S.layer = Math.max(1, Math.round(S.total * 0.35)); holdUntil = 0; });
+group("ms", v => { S.ms = +v; nextAt = 0; });
+group("accent", v => { S.accent = v; });
+group("state", v => { S.state = v; });
+group("ghost", v => { S.ghost = v === "1"; });
+scrub.addEventListener("input", () => { S.layer = +scrub.value; holdUntil = 0; syncScrub(); syncLamps(); });
+
+S.layer = Math.round(S.total * 0.35);
+syncScrub(); syncLamps();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

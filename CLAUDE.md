@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.4.0), then confirm all 29 files are present:
+Check `VERSION` at the repo root (should read 1.5.0), then confirm all 30 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (29 files):
+Expected file manifest (30 files):
 
 ```
 ./CLAUDE.md
@@ -50,6 +50,7 @@ Expected file manifest (29 files):
 ./mockups/fleet-cycle-mockup.html
 ./mockups/fleet-layout-mockup.html
 ./mockups/large-panel-options-mockup.html
+./mockups/layer-stack-mockup.html
 ./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
@@ -66,13 +67,14 @@ Expected file manifest (29 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.4.0:
+Quick behavioral confirmations that you're on 1.5.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
 grep -n 'add_get("/docs"' server.py        # docs route exists
 grep -n 'ARCHIVE' static/index.html        # archive link in status bar
 grep -n 'ERROR' static/app.js              # ERROR wording (not "FAULT")
+grep -n 'function layerStack' static/app.js # layer stack face (1.5)
 ```
 
 If any of these come back empty, re-obtain the current package before doing any work —
@@ -182,7 +184,11 @@ asyncio.run(main())"
   ~8s rotation — see `panelFaceFor()`: every panel not in ERROR/OFFLINE alternates status with a
   resting instrument on a **period of 3**, never 2, because `camHolder` advances with `tick` and a
   period-2 test lands every rest turn on the status turn at two printers; ERROR/OFFLINE panels
-  hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it),
+  hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it.
+  A printing/paused panel with layer data (`hasLayers()`) **alternates** its animation turns
+  between the layer stack and the instruments, counted per panel in `animTurns` — the count
+  must be of turns actually shown, because the camera rotation takes some, and at two
+  printers any parity of `tick` gives one panel only the stack and the other none),
   the canvas-drawn vector instruments (radar/orbit/scan), the detail view, and the two modals
   (stop-confirm, start-print). Canvas animation loops self-terminate via `cv.isConnected`
   checks — when adding a new animated face, follow that pattern or it'll leak loops on
@@ -217,7 +223,13 @@ mockup round:
 - Panels are dark navy CRT bezels with rounded corners, thin cyan vector line art, subtle
   scanline overlay on the whole app (`#app::after`). Resting/idle animations (radar sweep,
   orbit plot, spectrum scan) are ambient only — they carry no data meaning, don't wire real
-  values into them. The **progress reticle** is the exception by design: on the two-across
+  values into them. The **layer stack** (`layerStack()`, `mockups/layer-stack-mockup.html`) is
+  the data-driven face that alternates with them while printing/paused: one block per layer
+  (bucketed when blocks would drop below 7 px), current layer amber and pulsing, violet and
+  steady when paused. It reads `fleet` by printer id every frame, so pushes never tear it
+  down; finished blocks are cached offscreen. It assumes `layer_num` is the 1-based layer
+  being printed (finished = `layer_num - 1`) — unconfirmed against real firmware. The
+  **progress reticle** is the other data-driven exception: on the two-across
   layout, printing/paused/ERROR status faces show `reticle()` (open arc, stepped segments) with
   the real percent, amber/violet/red by state; it's CSS-hidden elsewhere, where the small
   wedge shows instead (`mockups/large-panel-options-mockup.html`, option C). The detail view

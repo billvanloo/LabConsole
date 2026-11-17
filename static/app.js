@@ -370,9 +370,155 @@ function complete(cv) {
   });
 }
 
+/* ---- layer stack (v1.5): completed layers as glowing cyan blocks, the layer being
+   printed pulsing amber (violet while paused). Reads live layer data from `fleet` by
+   printer id each frame, so telemetry updates never tear the face down. Finished blocks
+   are drawn once to an offscreen cache; per frame only the current block and the border
+   are redrawn, which keeps a Pi 3 comfortable. ---- */
+const STACK_MIN_PITCH = 7;   // px: below this, blocks get bucketed (N layers per block)
+const STACK_MAX_PITCH = 34;  // px: cap so short jobs don't render giant blocks
+function stackLayout(w, h, total) {
+  const m = { l: 14, r: 14, t: 14, b: 26 }, pad = 7;
+  const aw = w - m.l - m.r - 2 * pad, ah = h - m.t - m.b - 2 * pad;
+  if (aw < 20 || ah < 20 || !(total > 0)) return null;
+  let per = 1, fitL = null;
+  for (;;) {
+    const n = Math.ceil(total / per);
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols), s = Math.min(aw / cols, ah / rows);
+      if (!best || s > best.s) best = { cols, rows, s, n };
+    }
+    if (best.s >= STACK_MIN_PITCH || per >= 64) { fitL = { ...best, per }; break; }
+    per++;
+  }
+  const s = Math.min(fitL.s, STACK_MAX_PITCH), gw = fitL.cols * s, gh = fitL.rows * s;
+  const gx = m.l + pad + (aw - gw) / 2, gy = m.t + pad + (ah - gh) / 2;
+  return { ...fitL, s, q: s * 0.72, gx, gy, gw, gh,
+           border: { x: gx - pad, y: gy - pad, w: gw + 2 * pad, h: gh + 2 * pad } };
+}
+function stackBlock(L, i) {
+  const row = Math.floor(i / L.cols), col = i % L.cols, off = (L.s - L.q) / 2;
+  return { x: L.gx + col * L.s + off, y: L.gy + L.gh - (row + 1) * L.s + off, q: L.q };
+}
+function rrect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+}
+function layerStack(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const pid = cv.dataset.pid, root = cv.parentElement;
+  const readout = root.querySelector(".stackread"), bucket = root.querySelector(".stackbucket");
+  const d = devicePixelRatio || 1;
+  const cache = document.createElement("canvas");
+  cache.width = cv.width; cache.height = cv.height;
+  const cc = cache.getContext("2d"); cc.setTransform(d, 0, 0, d, 0, 0);
+  let L = null, total = 0, doneDrawn = -1, lastCur = -1, flash = { i: -1, t: 0 };
+  let layer = 0, state = "printing", pct = null, lastText = "", lastBucket = null;
+
+  function drawDone(ctx, i) {
+    const b = stackBlock(L, i), r = Math.max(1, b.q * 0.14);
+    ctx.save();
+    ctx.shadowColor = "rgba(63,216,255,.85)"; ctx.shadowBlur = Math.max(3, b.q * 0.6);
+    rrect(ctx, b.x, b.y, b.q, b.q, r);
+    ctx.fillStyle = "rgba(63,216,255,.22)"; ctx.fill();
+    ctx.lineWidth = Math.max(1, b.q * 0.12); ctx.strokeStyle = CY; ctx.stroke();
+    ctx.restore();
+  }
+  function rebuild(doneBlocks) {
+    cc.clearRect(0, 0, w, h);
+    cc.strokeStyle = "rgba(63,216,255,.11)"; cc.lineWidth = 1;   // ghost slots for layers still to come
+    for (let i = doneBlocks; i < L.n; i++) {
+      const b = stackBlock(L, i);
+      rrect(cc, b.x + .5, b.y + .5, b.q - 1, b.q - 1, Math.max(1, b.q * 0.14)); cc.stroke();
+    }
+    for (let i = 0; i < doneBlocks; i++) drawDone(cc, i);
+    doneDrawn = doneBlocks;
+  }
+
+  loop(cv, () => {
+    const now = performance.now();
+    const p = fleet.find(x => x.id === pid);
+    // Hold the last known values if the printer leaves printing/paused before the next face change.
+    if (p && (p.state === "printing" || p.state === "paused") && p.total_layers > 0) {
+      layer = p.layer || 0; state = p.state; pct = p.percent;
+      if (p.total_layers !== total) { total = p.total_layers; L = stackLayout(w, h, total); doneDrawn = -1; lastCur = -1; }
+    }
+    if (!L) return;
+    const live = p && (p.state === "printing" || p.state === "paused");
+    const doneLayers = Math.max(0, Math.min(layer - 1, total));
+    const doneBlocks = Math.floor(doneLayers / L.per);
+    const cur = Math.min(doneBlocks, L.n - 1);
+
+    if (doneBlocks !== doneDrawn) {
+      if (doneDrawn >= 0 && doneBlocks === doneDrawn + 1) { drawDone(cc, doneDrawn); doneDrawn = doneBlocks; }
+      else rebuild(doneBlocks);
+    }
+    if (lastCur >= 0 && cur === lastCur + 1) flash = { i: lastCur, t: now };
+    lastCur = cur;
+
+    c.clearRect(0, 0, w, h);
+    c.drawImage(cache, 0, 0, w, h);
+
+    // dashed job envelope; dashes march while printing
+    const B = L.border, printing = live && state === "printing";
+    c.save();
+    rrect(c, B.x, B.y, B.w, B.h, Math.min(12, L.s * 0.9 + 4));
+    c.setLineDash([7, 5]);
+    c.lineDashOffset = printing ? -(now / 90) % 12 : 0;
+    c.lineWidth = 1.3; c.strokeStyle = "rgba(63,216,255,.7)";
+    c.shadowColor = "rgba(63,216,255,.6)"; c.shadowBlur = 6;
+    c.stroke();
+    c.restore();
+
+    // current layer: halo + pulsing fill + dashed outline. Amber = printing, violet = paused.
+    if (live) {
+      const b = stackBlock(L, cur), col = state === "paused" ? VI : AM;
+      const pulse = state === "paused" ? 0.55 : 0.55 + 0.45 * Math.sin(now / 280);
+      const cx = b.x + b.q / 2, cy = b.y + b.q / 2;
+      c.save();
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, b.q * 1.9);
+      g.addColorStop(0, hexA(col, 0.30 * pulse)); g.addColorStop(1, hexA(col, 0));
+      c.fillStyle = g; c.fillRect(cx - b.q * 2, cy - b.q * 2, b.q * 4, b.q * 4);
+      c.shadowColor = col; c.shadowBlur = 4 + b.q * 1.2 * pulse;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = hexA(col, 0.22 + 0.4 * pulse); c.fill();
+      c.lineWidth = Math.max(1.2, b.q * 0.14); c.strokeStyle = col;
+      if (b.q >= 9) c.setLineDash([Math.max(2, b.q * 0.24), Math.max(1.5, b.q * 0.13)]);
+      c.stroke();
+      c.restore();
+    }
+
+    // completion flash: white, fading into the settled cyan block over 450 ms
+    const dt = now - flash.t;
+    if (flash.i >= 0 && dt < 450) {
+      const b = stackBlock(L, flash.i), a = 1 - dt / 450;
+      c.save();
+      c.shadowColor = "#ffffff"; c.shadowBlur = 6 + b.q * a;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = `rgba(255,255,255,${0.75 * a})`; c.fill();
+      c.restore();
+    }
+
+    // overlays: touch the DOM only when the text changes
+    const shownPct = pct != null ? pct : Math.floor(doneLayers / total * 100);
+    const text = `LAYER <b>${layer}</b> / ${total} · ${shownPct}%`;
+    if (text !== lastText && readout) { readout.innerHTML = text; lastText = text; }
+    const bt = L.per > 1 ? `1 BLOCK = ${L.per} LAYERS` : "";
+    if (bt !== lastBucket && bucket) { bucket.textContent = bt; lastBucket = bt; }
+  });
+}
 function mountAnims(root) {
   root.querySelectorAll("canvas[data-anim]").forEach(cv => {
-    ({ radar, orbit, scan, camdemo: camDemo, complete })[cv.dataset.anim]?.(cv);
+    ({ radar, orbit, scan, camdemo: camDemo, complete, stack: layerStack })[cv.dataset.anim]?.(cv);
   });
   root.querySelectorAll("canvas.wedge").forEach(cv =>
     wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
@@ -453,6 +599,14 @@ function faceComplete(p) {
   return `<canvas class="bganim" data-anim="complete" data-t0="${t0}"></canvas>
     <span class="facechip">COMPLETE</span>`;
 }
+function faceStack(p) {
+  return `<canvas class="bganim" data-anim="stack" data-pid="${esc(p.id)}"></canvas>
+    <span class="stackread"></span><span class="stackbucket"></span>
+    <span class="facechip">LAYER STACK</span>`;
+}
+// A printer with a job that has layer data can show the layer stack on its animation turn.
+const hasLayers = p => (p.state === "printing" || p.state === "paused") && p.total_layers > 0;
+const animTurns = new Map();  // printer id -> {tick, n}: animation turns shown while it has layers
 function faceRest(kind) {
   return `<canvas class="bganim" data-anim="${kind}"></canvas><span class="facechip">SCANNER · RESTING</span>`;
 }
@@ -509,10 +663,24 @@ function panelFaceFor(p, idx) {
   // should be and the readout never shows. 3 is coprime with that rotation.
   const phase = n > 1 ? (((tick - idx) % 3) + 3) % 3 : tick % 3;
   if (phase === 1) {
-    // Advance the instrument with the cycle so a panel doesn't show the same one
-    // forever. tick only moves on the 8s cycle, so the face stays put between
-    // renders and telemetry pushes don't swap the instrument mid-view.
-    const kind = REST_KINDS[(idx + Math.floor(tick / 3)) % REST_KINDS.length];
+    // `turn` grows by exactly one between a panel's animation turns (they come every 3
+    // ticks), so it advances the instrument and a panel doesn't show the same one forever.
+    // tick only moves on the 8s cycle, so the face stays put between renders and telemetry
+    // pushes don't swap it mid-view.
+    const turn = idx + Math.floor(tick / 3);
+    if (hasLayers(p)) {
+      // Printing/paused panels alternate the layer stack with the ambient instruments: the
+      // stack is in addition to them, not instead (mockups/layer-stack-mockup.html). This
+      // counts the animation turns the panel actually got, because the camera rotation
+      // takes some of them, and at two printers it takes every other one, so any parity of
+      // `tick` would show one panel only the stack and the other only the instruments.
+      let r = animTurns.get(p.id);
+      if (!r || r.tick !== tick) { r = { tick, n: r ? r.n + 1 : idx }; animTurns.set(p.id, r); }
+      if (r.n % 2 === 0) return ["stack", faceStack(p)];
+      const kind = REST_KINDS[((r.n - 1) / 2) % REST_KINDS.length];
+      return ["rest-" + kind, faceRest(kind)];
+    }
+    const kind = REST_KINDS[turn % REST_KINDS.length];
     return ["rest-" + kind, faceRest(kind)];
   }
   return ["status", faceStatus(p)];

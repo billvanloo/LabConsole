@@ -43,6 +43,17 @@
        more than three turns away from its status readout. The state lamp in each panel&rsquo;s header never cycles
        away, so fleet state stays readable from across the room. <b>Tap any panel</b> to
        open its detail console.</p>
+    <h3>THE LAYER STACK</h3>
+    <p>While a printer is printing or paused, its animation turns alternate between the
+       scanner animations and the <b>layer stack</b>, a picture of the job itself. Each block is
+       one layer. Finished layers stack bottom-up, left to right, as glowing cyan blocks; the
+       layer being printed glows <b>amber</b> and pulses, then flashes white and settles into
+       the stack when it completes. While the printer is paused, that block turns
+       <b>violet</b> and stops pulsing. The dashed rounded rectangle is the whole job: its size
+       is fixed by the total layer count, and the faint outlines inside it are the layers still
+       to come. The readout at the bottom left gives the layer and percentage. On very tall
+       prints each block stands for several layers, and a <b>1 BLOCK = N LAYERS</b> note
+       appears in the corner.</p>
     <p>On a wide screen, such as a fullscreen lab display, panels are laid out <b>two
        across</b>, and two rows fill the screen. Each panel takes about a quarter of the
        display, and its text and meters scale up to match. A third printer sits
