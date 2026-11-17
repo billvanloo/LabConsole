@@ -10,7 +10,12 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--cyan);
   font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
   overflow:hidden}
-#app{height:100%;display:flex;flex-direction:column;position:relative}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
 #app::after{content:"";position:fixed;inset:0;pointer-events:none;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
   mix-blend-mode:multiply;opacity:.5}
