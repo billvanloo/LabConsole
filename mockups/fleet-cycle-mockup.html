@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Console — Fleet Cycling Mockup (v1.4)</title>
+<style>
+  :root{
+    --bg:#070b18; --panel-deep:#060d1e; --bezel:#141822; --bezel-edge:#232a38;
+    --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+    --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+    --text-dim:#5f7ea6; --ok:#57e0b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cyan);
+    font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+    padding-bottom:40px}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+    mix-blend-mode:multiply;opacity:.5}
+  @media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+  .bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;
+    border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+    font-size:11px;letter-spacing:.2em;position:sticky;top:0;z-index:10}
+  .bar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+  .bar .sub{color:var(--text-dim);font-size:10px;letter-spacing:.3em}
+  .bar .spacer{flex:1}
+  .ctl{display:flex;align-items:center;gap:6px}
+  .ctl label{font-size:9px;letter-spacing:.25em;color:var(--text-dim)}
+  .ctl button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);
+    font-family:inherit;font-size:10px;letter-spacing:.15em;padding:5px 11px;
+    border-radius:3px;cursor:pointer}
+  .ctl button.on{color:var(--cyan);border-color:var(--cyan-dim);
+    background:rgba(63,216,255,.07);box-shadow:0 0 10px rgba(63,216,255,.12) inset}
+  .tickchip{font-size:9px;letter-spacing:.2em;color:var(--amber)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:16px}
+  .intro{font-size:12px;line-height:1.7;color:#90a9c8;max-width:78ch;margin-bottom:18px}
+  .intro b{color:#d7e6f7}
+  .intro code{color:var(--amber);background:rgba(255,201,77,.07);
+    border:1px solid #2a2410;border-radius:3px;padding:1px 5px;font-size:11px}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media (max-width:900px){.cols{grid-template-columns:1fr}}
+  .col h2{font-size:11px;letter-spacing:.3em;padding:8px 10px;border-radius:5px;
+    margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .col.bad h2{color:var(--alert);border:1px solid #4a1d0e;background:rgba(255,90,42,.05)}
+  .col.good h2{color:var(--ok);border:1px solid #14503f;background:rgba(87,224,184,.05)}
+  .col .note{font-size:10px;line-height:1.6;color:var(--text-dim);
+    padding:0 2px 10px;letter-spacing:.04em}
+
+  .grid{display:grid;gap:10px;grid-template-columns:1fr}
+  .ppanel{position:relative;background:var(--bezel);border:1px solid var(--bezel-edge);
+    border-radius:14px;padding:7px}
+  .ppanel.error{animation:bezelflash 1s steps(2) infinite}
+  @keyframes bezelflash{
+    0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+    50%{border-color:var(--bezel-edge);box-shadow:none}}
+  .crt{position:relative;border-radius:9px;height:190px;overflow:hidden;
+    background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+    border:1px solid #0d1526;display:flex;flex-direction:column}
+  .phead{display:flex;align-items:center;gap:8px;padding:7px 10px 5px;
+    font-size:10.5px;letter-spacing:.18em;position:relative;z-index:3}
+  .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+  .lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+  @keyframes pulse{50%{opacity:.45}} @keyframes blink{50%{opacity:.15}}
+  .pname{color:var(--cyan)}
+  .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto}
+  .pbody{flex:1;position:relative;padding:6px 12px 9px;display:flex;flex-direction:column;gap:6px}
+  .pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+
+  .statword{font-size:14px;letter-spacing:.35em;margin-top:1px}
+  .statword.idle{color:var(--cyan)} .statword.printing{color:var(--amber)}
+  .statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+  .fname{font-size:10.5px;color:#bfe9ff;word-break:break-all;line-height:1.35}
+  .kv{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text-dim);letter-spacing:.1em}
+  .kv b{color:var(--cyan);font-weight:400} .kv b.warm{color:var(--amber)}
+  .errline{font-size:9.5px;color:#ffb49b;line-height:1.5}
+  .progrow{display:flex;align-items:center;gap:9px;margin-top:auto}
+  .pbar{flex:1;height:9px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+  .pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+  .pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+  .ppct{font-size:11px;color:var(--amber)}
+  .facechip{position:absolute;right:9px;bottom:7px;font-size:8px;letter-spacing:.3em;color:#33507c;z-index:3}
+  .camtag{position:absolute;left:10px;top:7px;font-size:9px;letter-spacing:.25em;
+    color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:3}
+  .camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+  .camfoot{position:absolute;left:10px;bottom:7px;font-size:8.5px;color:var(--text-dim);letter-spacing:.15em;z-index:3}
+
+  /* face-trace strip */
+  .trace{margin-top:10px;border:1px solid #14203d;border-radius:6px;overflow:hidden}
+  .trace .th{font-size:8.5px;letter-spacing:.3em;color:var(--text-dim);
+    padding:6px 9px;background:var(--panel-deep);border-bottom:1px solid #14203d}
+  .trace table{width:100%;border-collapse:collapse}
+  .trace td{font-size:9px;padding:5px 8px;border-bottom:1px solid #0e1830;letter-spacing:.08em}
+  .trace td:first-child{color:var(--text-dim);white-space:nowrap;width:92px}
+  .trace .f{display:inline-block;padding:1px 6px;border-radius:2px;margin-right:4px;font-size:8.5px}
+  .f.cam{color:#f2f8ff;border:1px solid #3a4a62}
+  .f.status{color:var(--amber);border:1px solid #5a4a22}
+  .f.rest{color:var(--ok);border:1px solid #14503f}
+  .f.none{color:#3a4a66;border:1px solid #1c2638}
+  .verdict{font-size:10px;letter-spacing:.1em;padding:9px;line-height:1.6}
+  .verdict.bad{color:#ffb49b} .verdict.good{color:#9fe8d2}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="title">FLEET CYCLING</span>
+  <span class="sub">v1.3 vs v1.4 — SIDE BY SIDE</span>
+  <span class="spacer"></span>
+  <span class="ctl"><label>FLEET</label>
+    <button data-n="1">1</button><button data-n="2">2</button>
+    <button data-n="3" class="on">3</button></span>
+  <span class="ctl"><label>SPEED</label>
+    <button data-ms="8000" class="on">8s (REAL)</button><button data-ms="2000">2s (FAST)</button></span>
+  <span class="tickchip" id="tickchip">TICK 0</span>
+</div>
+
+<div class="wrap">
+  <p class="intro">
+    Both columns run the <b>same simulated fleet</b> on the same clock. Left is the rule
+    shipped in v1.3; right is the v1.4 rule (approved and shipped). With a printing printer,
+    the v1.3 rule never reaches a vector animation — the panel only alternates camera and
+    status, because the resting face was gated on <code>p.state === "idle"</code>. v1.4
+    gives a resting instrument to <b>any printer that is not in ERROR or OFFLINE</b>.
+    Simply deleting the idle gate is not enough: <code>camHolder</code> advances with
+    <code>tick</code>, so at <code>FLEET 2</code> v1.3's <code>(tick + idx) % 2</code> test
+    would put every rest turn where the status turn belongs and the readout would never
+    show. v1.4 uses a period of 3 for status/rest, which keeps all three faces reachable at
+    every fleet size (checked for 1–10 printers), and still rotates the instrument kind
+    over time. Not simulated here: the print-complete face, which takes priority over all
+    of these in both versions.
+  </p>
+
+  <div class="cols">
+    <div class="col bad">
+      <h2>✕ AS SHIPPED — v1.3</h2>
+      <div class="note">rest face requires <code style="font-size:10px">p.state === "idle"</code>, period 2</div>
+      <div class="grid" id="gridA"></div>
+      <div class="trace"><div class="th">FACE TRACE — LAST 6 TICKS</div>
+        <table id="traceA"></table>
+        <div class="verdict bad" id="verdictA"></div></div>
+    </div>
+    <div class="col good">
+      <h2>✓ v1.4 — SHIPPED</h2>
+      <div class="note">rest face for any state except ERROR / OFFLINE, period 3</div>
+      <div class="grid" id="gridB"></div>
+      <div class="trace"><div class="th">FACE TRACE — LAST 6 TICKS</div>
+        <table id="traceB"></table>
+        <div class="verdict good" id="verdictB"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const CY="#3fd8ff", AM="#ffc94d", AL="#ff5a2a", GR="#1a3a8f";
+const REST_KINDS = ["orbit","radar","scan"];
+
+/* ---- canvas instruments: copied verbatim from static/app.js ---- */
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+
+function radar(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14; let a = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); c.lineWidth = 1;
+    c.strokeStyle = GR;
+    for (let i = 1; i <= 3; i++) { c.beginPath(); c.arc(cx, cy, R * i / 3, 0, 7); c.stroke(); }
+    c.strokeStyle = CY; c.globalAlpha = .9; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
+    c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
+    if (c.createConicGradient) {
+      const g = c.createConicGradient(a, cx, cy);
+      g.addColorStop(0, "rgba(63,216,255,.35)"); g.addColorStop(.12, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
+    }
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);
+    c.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); c.stroke();
+    [[.6, 1.2], [.35, 3.9], [.82, 5.1]].forEach(([rr, aa], i) => {
+      const bl = (Math.sin(Date.now() / 500 + i * 2) + 1) / 2;
+      c.fillStyle = i === 1 ? AL : AM; c.globalAlpha = .3 + bl * .7;
+      c.beginPath(); c.arc(cx + R * rr * Math.cos(aa), cy + R * rr * Math.sin(aa), 2.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+    });
+    a += 0.02;
+  });
+}
+function orbit(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); const cx = w * .38, cy = h * .55;
+    c.strokeStyle = GR; c.lineWidth = 1;
+    for (let i = 0; i < 4; i++) { c.beginPath(); c.ellipse(cx, cy, 26 + i * 22, (26 + i * 22) * .62, -.5, 0, 7); c.globalAlpha = .6; c.stroke(); }
+    c.globalAlpha = 1; c.strokeStyle = AM; c.beginPath(); c.moveTo(-10, h * .9); c.quadraticCurveTo(w * .5, h * .2, w + 10, h * .55); c.stroke();
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(-10, h * .15); c.lineTo(w + 10, h * .75); c.globalAlpha = .5; c.stroke(); c.globalAlpha = 1;
+    c.strokeStyle = AM; c.lineWidth = 1.4; c.beginPath(); c.arc(cx, cy, 15, 0, 7); c.stroke();
+    c.strokeStyle = AL; c.globalAlpha = .85; c.beginPath(); c.arc(cx, cy, 18, 0, 7); c.stroke(); c.globalAlpha = 1;
+    c.beginPath(); c.moveTo(cx - 9, cy + 3); c.bezierCurveTo(cx - 3, cy - 9, cx + 6, cy + 9, cx + 11, cy - 4); c.strokeStyle = AM; c.stroke();
+    const ox = cx + 70 * Math.cos(t), oy = cy + 70 * .62 * Math.sin(t);
+    c.fillStyle = CY; c.beginPath(); c.arc(ox, oy, 3, 0, 7); c.fill();
+    c.strokeStyle = CY; c.globalAlpha = .5; c.beginPath(); c.arc(ox, oy, 7, 0, 7); c.stroke(); c.globalAlpha = 1;
+    t += .012;
+  });
+}
+function scan(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const n = 16, bw = (w - 40) / n; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = GR; c.beginPath(); c.moveTo(18, h - 22); c.lineTo(w - 18, h - 22); c.stroke();
+    for (let i = 0; i < n; i++) {
+      const v = (Math.sin(t + i * .7) + 1) / 2 * (h - 56) + 8;
+      c.fillStyle = i % 5 === 4 ? AM : CY; c.globalAlpha = .85;
+      c.fillRect(20 + i * bw, h - 24 - v, bw * .55, v); c.globalAlpha = 1;
+    }
+    c.strokeStyle = AM; c.beginPath();
+    for (let x = 0; x <= w - 36; x += 4) { const y = h - 70 - Math.sin(t * 2 + x * .05) * 10; x ? c.lineTo(18 + x, y) : c.moveTo(18, y); }
+    c.stroke(); t += .03;
+  });
+}
+
+function camDemo(cv){
+  const [c,w,h]=fit(cv); if(w<10||h<10) return; let t=0;
+  loop(cv,()=>{
+    c.fillStyle="#050910"; c.fillRect(0,0,w,h);
+    c.strokeStyle="rgba(63,216,255,.75)"; c.lineWidth=1;
+    c.strokeRect(w*.2,h*.18,w*.6,h*.66);
+    c.beginPath(); c.moveTo(w*.2,h*.18); c.lineTo(w*.28,h*.08);
+    c.lineTo(w*.72,h*.08); c.lineTo(w*.8,h*.18); c.stroke();
+    const gy=h*.62+Math.sin(t)*4;
+    c.strokeStyle=AM; c.beginPath(); c.moveTo(w*.24,gy); c.lineTo(w*.76,gy); c.stroke();
+    c.fillStyle=AM; c.fillRect(w*.24+((Math.sin(t*3)+1)/2)*(w*.5),gy-7,10,7);
+    c.fillStyle="rgba(255,255,255,.05)";
+    for(let i=0;i<70;i++) c.fillRect(Math.random()*w,Math.random()*h,1.4,1.4);
+    t+=.03;
+  });
+}
+function mountAnims(root){
+  root.querySelectorAll("canvas[data-anim]").forEach(cv=>{
+    ({radar,orbit,scan,camdemo:camDemo})[cv.dataset.anim]?.(cv);
+  });
+}
+
+/* ---- simulated fleet ---- */
+const ALL = [
+  {id:"v1", name:"VOYAGER-01", model:"X1 CARBON", state:"printing",
+   file:"sensor_mount_bracket_v3.3mf", layer:143, total:230, pct:62, eta:"1H 47M"},
+  {id:"o2", name:"OUTPOST-02", model:"H2D", state:"idle"},
+  {id:"s3", name:"SCOUT-03", model:"A1 MINI", state:"error", pct:37},
+];
+let FLEET_N = 3, CYCLE_MS = 8000, tick = 0, camHolder = 0, timer = null;
+const fleet = () => ALL.slice(0, FLEET_N);
+
+/* ---- the two rules under comparison ---- */
+// Both rules return "cam", "status" or "rest-<kind>"; each mirrors panelFaceFor in
+// static/app.js at that version, minus the print-complete branch.
+const restKind = idx => REST_KINDS[(idx + Math.floor(tick / 3)) % REST_KINDS.length];
+function faceShipped(p, idx, n){            // v1.3
+  const camTurn = n > 1 ? idx === camHolder % n : tick % 3 === 2;
+  if (camTurn) return "cam";
+  if (p.state === "error" || p.state === "offline") return "status";
+  if ((tick + idx) % 2 === 1 && p.state === "idle") return "rest-" + restKind(idx);
+  return "status";
+}
+function faceProposed(p, idx, n){           // v1.4
+  const frozen = (p.state === "error" || p.state === "offline");
+  const camTurn = n > 1 ? idx === camHolder % n : tick % 3 === 2;
+  if (camTurn) return "cam";
+  if (frozen) return "status";
+  const phase = n > 1 ? (((tick - idx) % 3) + 3) % 3 : tick % 3;   // period 3
+  return phase === 1 ? "rest-" + restKind(idx) : "status";
+}
+
+/* ---- face markup ---- */
+function statusHTML(p){
+  if (p.state === "printing") return `
+    <div class="statword printing">PRINTING</div>
+    <div class="fname">${p.file}</div>
+    <div class="kv"><span>LAYER</span><b>${p.layer} / ${p.total}</b></div>
+    <div class="kv"><span>NOZZLE / BED</span><b class="warm">220° / 65°</b></div>
+    <div class="progrow"><div class="pbar"><i style="width:${p.pct}%"></i></div>
+      <span class="ppct">${p.pct}%</span></div>
+    <span class="facechip">STATUS</span>`;
+  if (p.state === "error") return `
+    <div class="statword error">ERROR</div>
+    <div class="errline">HMS 0700-8000-0002-0001<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
+    <div class="kv"><span>JOB HELD AT</span><b>${p.pct}%</b></div>
+    <div class="progrow"><div class="pbar errbar"><i style="width:${p.pct}%"></i></div>
+      <span class="ppct" style="color:var(--alert)">${p.pct}%</span></div>
+    <span class="facechip">STATUS</span>`;
+  return `
+    <div class="statword idle">IDLE</div>
+    <div class="kv"><span>NOZZLE / BED</span><b>28° / 27°</b></div>
+    <div class="kv"><span>READY</span><b class="warm">AWAITING ASSIGNMENT</b></div>
+    <span class="facechip">STATUS</span>`;
+}
+function restHTML(kind){
+  return `<canvas class="bganim" data-anim="${kind}"></canvas>
+    <span class="facechip">SCANNER · RESTING</span>`;
+}
+function camHTML(){
+  return `<canvas class="bganim" data-anim="camdemo"></canvas>
+    <span class="camtag rec">LIVE</span><span class="camfoot">RTSPS :322 RELAY</span>`;
+}
+function bodyFor(face, p){
+  if (face === "cam") return camHTML();
+  if (face.startsWith("rest-")) return restHTML(face.slice(5));
+  return statusHTML(p);
+}
+
+/* ---- rendering ---- */
+const panels = {A:new Map(), B:new Map()};
+function build(which, gridId){
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = ""; panels[which].clear();
+  fleet().forEach(p => {
+    const el = document.createElement("div");
+    el.className = "ppanel" + (p.state === "error" ? " error" : "");
+    el.innerHTML = `<div class="crt">
+      <div class="phead"><span class="lamp ${p.state}"></span>
+        <span class="pname">${p.name}</span><span class="pmodel">${p.model}</span></div>
+      <div class="pbody"></div></div>`;
+    grid.appendChild(el); panels[which].set(p.id, el);
+  });
+}
+const history = {A:[], B:[]};
+function render(which, ruleFn){
+  const n = fleet().length;
+  const row = [];
+  fleet().forEach((p, idx) => {
+    const face = ruleFn(p, idx, n);
+    row.push(face.split("-")[0]);
+    const body = panels[which].get(p.id).querySelector(".pbody");
+    const key = face;
+    if (body.dataset.k !== key){
+      body.dataset.k = key;
+      body.innerHTML = bodyFor(face, p);
+      mountAnims(body);
+    }
+  });
+  history[which].push(row);
+  if (history[which].length > 6) history[which].shift();
+  drawTrace(which);
+}
+function drawTrace(which){
+  const t = document.getElementById("trace" + which);
+  const names = fleet().map(p => p.name.split("-")[0]);
+  t.innerHTML = history[which].map((row, i) => {
+    const tn = tick - (history[which].length - 1 - i);
+    return `<tr><td>TICK ${tn}</td><td>` + row.map((f, idx) =>
+      `<span class="f ${f}">${names[idx]}:${f.toUpperCase()}</span>`).join("") + `</td></tr>`;
+  }).join("");
+  // verdict: did any non-error printer ever reach a rest face?
+  const seen = new Set(history[which].flat());
+  const v = document.getElementById("verdict" + which);
+  if (which === "A"){
+    const printingRest = history.A.some(r => r[0] === "rest");
+    v.textContent = printingRest
+      ? "VOYAGER-01 reached a resting animation."
+      : "VOYAGER-01 (PRINTING) has not shown a single vector animation — it only alternates CAM and STATUS.";
+  } else {
+    const printingRest = history.B.some(r => r[0] === "rest");
+    v.textContent = printingRest
+      ? "VOYAGER-01 (PRINTING) cycles through status, its vector animation, and the camera."
+      : "Waiting for the next tick…";
+  }
+}
+
+function step(){
+  tick++;
+  camHolder = (camHolder + 1) % fleet().length;
+  document.getElementById("tickchip").textContent = "TICK " + tick;
+  render("A", faceShipped);
+  render("B", faceProposed);
+}
+function reset(){
+  tick = 0; camHolder = 0; history.A = []; history.B = [];
+  build("A","gridA"); build("B","gridB");
+  render("A", faceShipped); render("B", faceProposed);
+  clearInterval(timer); timer = setInterval(step, CYCLE_MS);
+}
+document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => {
+  document.querySelectorAll("[data-n]").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); FLEET_N = +b.dataset.n; reset();
+});
+document.querySelectorAll("[data-ms]").forEach(b => b.onclick = () => {
+  document.querySelectorAll("[data-ms]").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); CYCLE_MS = +b.dataset.ms; reset();
+});
+reset();
+</script>
+</body>
+</html>

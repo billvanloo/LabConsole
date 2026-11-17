@@ -267,8 +267,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("The status bar shows fleet totals, the clock, and a <b>LINK</b> indicator for the "
             "browser\u2019s connection to the Pi \u2014 if LINK is red, the view may be stale. Each "
             "printer is a bezel-framed panel that cycles every ~8 seconds between its status "
-            "readout, an ambient scanner animation (idle printers only), and \u2014 for one printer "
-            "at a time \u2014 the live camera slot. The state lamp in the panel header never cycles "
+            "readout, an ambient scanner animation (any printer not in ERROR or OFFLINE), and \u2014 "
+            "for one printer at a time \u2014 the live camera slot. A panel is never more than "
+            "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
           Paragraph("02 \u00b7 PRINTER STATES", S["h2"]), rule(),
           StateLegendFig(), Spacer(1, 6)]
@@ -276,7 +277,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["IDLE", "Steady cyan lamp. Online and ready; readout shows temperatures and the last job."],
         ["PRINTING", "Pulsing amber. File name, layer count, temperatures, time remaining, progress."],
         ["PAUSED", "Steady violet. Job held; resume from the detail view."],
-        ["ERROR", "Blinking red lamp <b>and the entire panel bezel flashes red in sync</b>. Readout lists HMS code(s). Error panels never cycle away."],
+        ["ERROR", "Blinking red lamp <b>and the entire panel bezel flashes red in sync</b>. Readout lists HMS code(s). Error panels never show the scanner animation; they give way only to the live camera on their turn."],
         ["OFFLINE", "Dark lamp. No MQTT link \u2014 check power, network, and the printer\u2019s network settings."],
     ], [0.9 * inch, 5.5 * inch])
     e += [PanelFig(),

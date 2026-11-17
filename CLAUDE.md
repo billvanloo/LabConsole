@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.3.0), then confirm all 25 files are present:
+Check `VERSION` at the repo root (should read 1.4.0), then confirm all 26 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (25 files):
+Expected file manifest (26 files):
 
 ```
 ./CLAUDE.md
@@ -46,6 +46,7 @@ Expected file manifest (25 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./mockups/fleet-cycle-mockup.html
 ./mockups/print-complete-celebration.html
 ./requirements-dev.txt
 ./requirements.txt
@@ -62,7 +63,7 @@ Expected file manifest (25 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.3.0:
+Quick behavioral confirmations that you're on 1.4.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
@@ -175,7 +176,10 @@ asyncio.run(main())"
   `BambuPrinter`, add the matching one to `DemoPrinter` or demo mode will throw on that action.
 - **Frontend has no framework and no build step.** `static/app.js` owns: WebSocket
   connect/reconnect, panel face-cycling (status / resting-animation / camera / print-complete,
-  ~8s rotation),
+  ~8s rotation — see `panelFaceFor()`: every panel not in ERROR/OFFLINE alternates status with a
+  resting instrument on a **period of 3**, never 2, because `camHolder` advances with `tick` and a
+  period-2 test lands every rest turn on the status turn at two printers; ERROR/OFFLINE panels
+  hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it),
   the canvas-drawn vector instruments (radar/orbit/scan), the detail view, and the two modals
   (stop-confirm, start-print). Canvas animation loops self-terminate via `cv.isConnected`
   checks — when adding a new animated face, follow that pattern or it'll leak loops on
@@ -228,7 +232,8 @@ mockup file first rather than editing `static/` directly, unless told otherwise.
 Mockups live in `mockups/` and are **kept after porting**, not deleted — they are the record of
 what was approved, and they run standalone so a later session can see the intended motion
 without reconstructing it from `app.js`. `mockups/print-complete-celebration.html` holds all
-three print-complete proposals; option C (INSPECTION) is the one that shipped. The visual
+three print-complete proposals; option C (INSPECTION) is the one that shipped.
+`mockups/fleet-cycle-mockup.html` runs the v1.3 and v1.4 face-cycling rules side by side. The visual
 vocabulary there — tapered wedge meters, open-arc reticles, stepped rather than eased motion —
 came from the owner's own Galaxy's Edge reference photographs, so prefer it over inventing a
 new treatment.
