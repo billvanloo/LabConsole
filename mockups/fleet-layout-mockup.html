@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Console — Fleet Layout Mockup (2 across)</title>
+<!-- Mockup for review. The CSS below the PROPOSED marker is the change; everything above it
+     and the canvas instruments are copied verbatim from static/style.css and static/app.js
+     (v1.4.0). Open fullscreen (F11 / Ctrl+Cmd+F) to judge it as the lab display will show it. -->
+<style>
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+.phead .pname{color:var(--cyan)}
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+.camtag.dim{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+
+
+/* ================= PROPOSED v1.5: two panels across on a wide screen =================
+   Applies only on a wide, tall viewport (a fullscreen desktop or kiosk display).
+   Narrow windows and phones keep the current auto-fit layout. */
+@media (min-width: 1000px) and (min-height: 560px) {
+  body.proposed #fleet { container-type: size; }
+  body.proposed .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* two rows exactly fill the screen; a 5th+ printer scrolls to a third row */
+    grid-auto-rows: calc((100cqh - 36px) / 2);
+  }
+  body.proposed .ppanel { display: flex; }
+  body.proposed .ppanel .crt { flex: 1; min-height: 0; container-type: inline-size; }
+  /* type and meters scale with the panel so the readout carries across the room */
+  body.proposed .phead { font-size: clamp(11px, 1.45cqw, 16px); padding: 1.3cqw 1.6cqw .9cqw; gap: 1cqw; }
+  body.proposed .phead .lamp { width: clamp(9px, 1.3cqw, 15px); height: clamp(9px, 1.3cqw, 15px); }
+  body.proposed .phead .pmodel { font-size: clamp(9px, 1.1cqw, 13px); }
+  body.proposed .pbody { padding: 1.2cqw 2.2cqw 1.8cqw; gap: clamp(7px, 1.3cqw, 16px); }
+  body.proposed .statword { font-size: clamp(15px, 3.6cqw, 40px); }
+  body.proposed .fname { font-size: clamp(11px, 2.1cqw, 22px); }
+  body.proposed .kv { font-size: clamp(10px, 1.8cqw, 19px); }
+  body.proposed .errline { font-size: clamp(10px, 1.8cqw, 19px); }
+  body.proposed .progrow { gap: 1.6cqw; }
+  body.proposed .pbar { height: clamp(10px, 1.7cqw, 18px); }
+  body.proposed .ppct { font-size: clamp(12px, 2.8cqw, 30px); }
+  body.proposed canvas.wedge { width: clamp(34px, 6.5cqw, 72px) !important; height: clamp(34px, 6.5cqw, 72px) !important; }
+  body.proposed .facechip { font-size: clamp(8px, .95cqw, 11px); right: 1.6cqw; bottom: 1.2cqw; }
+  body.proposed .camtag { font-size: clamp(9px, 1.25cqw, 14px); left: 1.6cqw; top: 1.2cqw; }
+  body.proposed .camfoot { font-size: clamp(9px, 1.1cqw, 12px); left: 1.6cqw; bottom: 1.2cqw; }
+
+  /* three printers, option B: third panel centered under the first two */
+  body.proposed.third-center .grid > .ppanel:nth-child(3):last-child {
+    grid-column: 1 / -1; justify-self: center; width: calc(50% - 6px);
+  }
+}
+/* option C: an empty bay for the 4th printer, drawn as a powered-down panel */
+.ppanel.vacant { cursor: default; opacity: .7; }
+.ppanel.vacant .crt { background: var(--panel-deep); }
+.vacantbody { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1cqw; color: #2c3d5c; letter-spacing: .4em; }
+.vacantbody .big { font-size: clamp(13px, 2.6cqw, 28px); }
+.vacantbody .small { font-size: clamp(9px, 1.1cqw, 12px); letter-spacing: .3em; }
+
+/* ================= mockup-only review controls (not part of the proposal) ================= */
+.mockctl { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 50;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center;
+  background: rgba(6,10,22,.94); border: 1px solid #2a3a5c; border-radius: 8px; padding: 7px 12px;
+  font-size: 9px; letter-spacing: .2em; color: var(--text-dim); box-shadow: 0 6px 24px rgba(0,0,0,.6);
+  max-width: calc(100vw - 20px); }
+.mockctl .g { display: flex; align-items: center; gap: 5px; }
+.mockctl b { color: #8fa6c8; font-weight: 400; margin-right: 3px; }
+.mockctl button { background: transparent; border: 1px solid #1c2a4a; color: var(--text-dim); font-family: inherit;
+  font-size: 9px; letter-spacing: .15em; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
+.mockctl button.on { color: var(--cyan); border-color: var(--cyan-dim); background: rgba(63,216,255,.08); }
+.mockctl button:disabled { opacity: .35; cursor: default; }
+.mockctl .hide { margin-left: 4px; }
+.mockctl.min > .g { display: none; }
+.mocknote { flex-basis: 100%; font-size: 10px; line-height: 1.6; letter-spacing: .04em; color: #90a9c8;
+  max-width: 1100px; text-align: center; }
+.mockctl.min > .mocknote { display: none; }
+
+</style>
+</head>
+<body class="proposed">
+<div id="app">
+  <div class="statusbar">
+    <span class="title">LAB CONSOLE</span>
+    <span class="glyphs">⌌⍚⌏ ⍙⌇⍜ ⌈⍑⌋</span>
+    <span class="spacer"></span>
+    <span id="chips"></span>
+    <a class="archlink" href="#" title="Technical Archive">⌘ ARCHIVE</a>
+    <span class="linkstate">LINK OK</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+  <div id="fleet"><div class="grid" id="grid"></div></div>
+</div>
+
+<div class="mockctl" id="ctl">
+  <div class="mocknote" id="note"></div>
+  <span class="g"><b>LAYOUT</b><button data-k="layout" data-v="current">CURRENT v1.4</button><button data-k="layout" data-v="proposed" class="on">PROPOSED · 2 ACROSS</button></span>
+  <span class="g"><b>PRINTERS</b><button data-k="n" data-v="3" class="on">3</button><button data-k="n" data-v="4">4</button></span>
+  <span class="g"><b>3RD PANEL</b><button data-k="third" data-v="left" class="on">A · LEFT</button><button data-k="third" data-v="center">B · CENTERED</button><button data-k="third" data-v="vacant">C · + VACANT BAY</button></span>
+  <span class="g"><b>LEMUR</b><button data-k="err" data-v="0" class="on">PRINTING</button><button data-k="err" data-v="1">ERROR</button></span>
+  <span class="g"><b>FACES</b><button data-k="cycle" data-v="1" class="on">CYCLE 4s</button><button data-k="cycle" data-v="0">HOLD STATUS</button></span>
+  <button class="hide" id="hidebtn">HIDE ▾</button>
+</div>
+
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
+const CYCLE_MS = 8000;
+const REST_KINDS = ["orbit", "radar", "scan"];
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+function radar(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14; let a = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); c.lineWidth = 1;
+    c.strokeStyle = GR;
+    for (let i = 1; i <= 3; i++) { c.beginPath(); c.arc(cx, cy, R * i / 3, 0, 7); c.stroke(); }
+    c.strokeStyle = CY; c.globalAlpha = .9; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
+    c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
+    if (c.createConicGradient) {
+      const g = c.createConicGradient(a, cx, cy);
+      g.addColorStop(0, "rgba(63,216,255,.35)"); g.addColorStop(.12, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
+    }
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);
+    c.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); c.stroke();
+    [[.6, 1.2], [.35, 3.9], [.82, 5.1]].forEach(([rr, aa], i) => {
+      const bl = (Math.sin(Date.now() / 500 + i * 2) + 1) / 2;
+      c.fillStyle = i === 1 ? AL : AM; c.globalAlpha = .3 + bl * .7;
+      c.beginPath(); c.arc(cx + R * rr * Math.cos(aa), cy + R * rr * Math.sin(aa), 2.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+    });
+    a += 0.02;
+  });
+}
+function orbit(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); const cx = w * .38, cy = h * .55;
+    c.strokeStyle = GR; c.lineWidth = 1;
+    for (let i = 0; i < 4; i++) { c.beginPath(); c.ellipse(cx, cy, 26 + i * 22, (26 + i * 22) * .62, -.5, 0, 7); c.globalAlpha = .6; c.stroke(); }
+    c.globalAlpha = 1; c.strokeStyle = AM; c.beginPath(); c.moveTo(-10, h * .9); c.quadraticCurveTo(w * .5, h * .2, w + 10, h * .55); c.stroke();
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(-10, h * .15); c.lineTo(w + 10, h * .75); c.globalAlpha = .5; c.stroke(); c.globalAlpha = 1;
+    c.strokeStyle = AM; c.lineWidth = 1.4; c.beginPath(); c.arc(cx, cy, 15, 0, 7); c.stroke();
+    c.strokeStyle = AL; c.globalAlpha = .85; c.beginPath(); c.arc(cx, cy, 18, 0, 7); c.stroke(); c.globalAlpha = 1;
+    c.beginPath(); c.moveTo(cx - 9, cy + 3); c.bezierCurveTo(cx - 3, cy - 9, cx + 6, cy + 9, cx + 11, cy - 4); c.strokeStyle = AM; c.stroke();
+    const ox = cx + 70 * Math.cos(t), oy = cy + 70 * .62 * Math.sin(t);
+    c.fillStyle = CY; c.beginPath(); c.arc(ox, oy, 3, 0, 7); c.fill();
+    c.strokeStyle = CY; c.globalAlpha = .5; c.beginPath(); c.arc(ox, oy, 7, 0, 7); c.stroke(); c.globalAlpha = 1;
+    t += .012;
+  });
+}
+function scan(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const n = 16, bw = (w - 40) / n; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = GR; c.beginPath(); c.moveTo(18, h - 22); c.lineTo(w - 18, h - 22); c.stroke();
+    for (let i = 0; i < n; i++) {
+      const v = (Math.sin(t + i * .7) + 1) / 2 * (h - 56) + 8;
+      c.fillStyle = i % 5 === 4 ? AM : CY; c.globalAlpha = .85;
+      c.fillRect(20 + i * bw, h - 24 - v, bw * .55, v); c.globalAlpha = 1;
+    }
+    c.strokeStyle = AM; c.beginPath();
+    for (let x = 0; x <= w - 36; x += 4) { const y = h - 70 - Math.sin(t * 2 + x * .05) * 10; x ? c.lineTo(18 + x, y) : c.moveTo(18, y); }
+    c.stroke(); t += .03;
+  });
+}
+function wedge(cv, pct, col) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 3;
+  c.strokeStyle = GR; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+  c.fillStyle = col; c.globalAlpha = .28; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.fill();
+  c.globalAlpha = 1; c.strokeStyle = col; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.closePath(); c.stroke();
+}
+function camDemo(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.fillStyle = "#050910"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "rgba(63,216,255,.75)"; c.lineWidth = 1;
+    c.strokeRect(w * .2, h * .18, w * .6, h * .66);
+    c.beginPath(); c.moveTo(w * .2, h * .18); c.lineTo(w * .28, h * .08);
+    c.lineTo(w * .72, h * .08); c.lineTo(w * .8, h * .18); c.stroke();
+    const gy = h * .62 + Math.sin(t) * 4;
+    c.strokeStyle = AM; c.beginPath(); c.moveTo(w * .24, gy); c.lineTo(w * .76, gy); c.stroke();
+    c.fillStyle = AM; c.fillRect(w * .24 + ((Math.sin(t * 3) + 1) / 2) * (w * .5), gy - 7, 10, 7);
+    c.strokeStyle = "rgba(63,216,255,.4)"; c.strokeRect(w * .33, h * .66, w * .34, h * .12);
+    c.fillStyle = "rgba(255,255,255,.05)";
+    for (let i = 0; i < 90; i++) c.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4);
+    t += .03;
+  });
+}
+
+/* ---- simulated fleet (the lab's three printers plus a possible fourth) ---- */
+const ALL = [
+  { id: "panda", name: "Panda X1C", model: "X1C", state: "printing", file: "phone_case_v4.3mf", layer: 61, total: 112, nozzle: 220, bed: 55, eta: "38M", pct: 54 },
+  { id: "lemur", name: "Lemur X1C", model: "X1C", state: "printing", file: "cable_clip_x12.3mf", layer: 11, total: 286, nozzle: 220, bed: 55, eta: "1H 48M", pct: 17 },
+  { id: "elephant", name: "Elephant H2D", model: "H2D", state: "printing", file: "Part Studio 1 (3)", layer: 3, total: 102, nozzle: 220, bed: 55, eta: "3H 46M", pct: 6 },
+  { id: "bay4", name: "Bay 4 A1", model: "A1", state: "idle", file: "keychain.3mf", nozzle: 27, bed: 26 },
+];
+const opt = { layout: "proposed", n: 3, third: "left", err: 0, cycle: 1 };
+let tick = 0, camHolder = 0, timer = null;
+
+function fleet() {
+  return ALL.slice(0, opt.n).map(p => (p.id === "lemur" && opt.err) ? { ...p, state: "error" } : p);
+}
+function statusHTML(p) {
+  if (p.state === "printing") return `
+    <div class="statword printing">PRINTING</div>
+    <div class="fname">${p.file}</div>
+    <div class="kv"><span>LAYER</span><b>${p.layer} / ${p.total}</b></div>
+    <div class="kv"><span>NOZZLE / BED</span><b class="warm">${p.nozzle}° / ${p.bed}°</b></div>
+    <div class="kv"><span>TIME LEFT</span><b class="warm">${p.eta}</b></div>
+    <div class="progrow">
+      <canvas class="wedge" data-pct="${p.pct}" width="34" height="34" style="width:34px;height:34px"></canvas>
+      <div class="pbar"><i style="width:${p.pct}%"></i></div><span class="ppct">${p.pct}%</span>
+    </div>
+    <span class="facechip">STATUS</span>`;
+  if (p.state === "error") return `
+    <div class="statword error">ERROR</div>
+    <div class="errline">HMS 0300-0200-0001-0001<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
+    <div class="kv"><span>JOB HELD AT</span><b>${p.pct}%</b></div>
+    <div class="progrow">
+      <canvas class="wedge" data-pct="${p.pct}" data-col="al" width="34" height="34" style="width:34px;height:34px"></canvas>
+      <div class="pbar errbar"><i style="width:${p.pct}%"></i></div>
+      <span class="ppct" style="color:var(--alert)">${p.pct}%</span>
+    </div>
+    <span class="facechip">STATUS</span>`;
+  return `
+    <div class="statword idle">IDLE</div>
+    <div class="kv"><span>NOZZLE / BED</span><b>${p.nozzle}° / ${p.bed}°</b></div>
+    <div class="kv"><span>LAST JOB</span><b>${p.file}</b></div>
+    <div class="kv"><span>READY</span><b class="warm">AWAITING ASSIGNMENT</b></div>
+    <span class="facechip">STATUS</span>`;
+}
+const restHTML = k => `<canvas class="bganim" data-anim="${k}"></canvas><span class="facechip">SCANNER · RESTING</span>`;
+const camHTML = () => `<canvas class="bganim" data-anim="camdemo"></canvas>
+  <span class="camtag rec">LIVE</span><span class="camfoot">RTSPS :322 RELAY</span>`;
+
+/* the shipped v1.4 face rule (panelFaceFor), minus the print-complete branch */
+function faceFor(p, idx, n) {
+  if (!opt.cycle) return "status";
+  const frozen = p.state === "error" || p.state === "offline";
+  const camTurn = n > 1 ? idx === camHolder % n : tick % 3 === 2;
+  if (camTurn) return "cam";
+  if (frozen) return "status";
+  const phase = n > 1 ? (((tick - idx) % 3) + 3) % 3 : tick % 3;
+  return phase === 1 ? "rest-" + REST_KINDS[(idx + Math.floor(tick / 3)) % REST_KINDS.length] : "status";
+}
+function mount(root) {
+  root.querySelectorAll("canvas[data-anim]").forEach(cv =>
+    ({ radar, orbit, scan, camdemo: camDemo })[cv.dataset.anim]?.(cv));
+  root.querySelectorAll("canvas.wedge").forEach(cv => wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
+}
+
+const grid = document.getElementById("grid");
+function build() {
+  document.body.className = (opt.layout === "proposed" ? "proposed" : "") + (opt.third === "center" ? " third-center" : "");
+  grid.innerHTML = "";
+  const f = fleet();
+  f.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "ppanel" + (p.state === "error" ? " error" : "");
+    el.innerHTML = `<div class="crt">
+      <div class="phead"><span class="lamp ${p.state}"></span><span class="pname">${p.name}</span><span class="pmodel">${p.model}</span></div>
+      <div class="pbody"></div></div>`;
+    el.dataset.id = p.id;
+    grid.appendChild(el);
+  });
+  if (opt.layout === "proposed" && opt.n === 3 && opt.third === "vacant") {
+    const el = document.createElement("div");
+    el.className = "ppanel vacant";
+    el.innerHTML = `<div class="crt">
+      <div class="phead"><span class="lamp offline"></span><span class="pname" style="color:#2c3d5c">BAY 04</span><span class="pmodel">—</span></div>
+      <div class="vacantbody"><span class="big">BAY VACANT</span><span class="small">NO PRINTER ASSIGNED</span></div></div>`;
+    grid.appendChild(el);
+  }
+  chips(f); render(true); note();
+}
+function render(force) {
+  const f = fleet(), n = f.length;
+  f.forEach((p, i) => {
+    const body = grid.children[i].querySelector(".pbody");
+    const face = faceFor(p, i, n);
+    if (!force && body.dataset.face === face) return;
+    body.dataset.face = face;
+    body.innerHTML = face === "cam" ? camHTML() : face.startsWith("rest-") ? restHTML(face.slice(5)) : statusHTML(p);
+    mount(body);
+  });
+}
+function chips(f) {
+  const c = s => f.filter(p => p.state === s).length;
+  document.getElementById("chips").innerHTML =
+    `<span class="fleetchip"><span class="dot idle"></span>${c("idle")} IDLE</span>
+     <span class="fleetchip"><span class="dot print"></span>${c("printing")} PRINTING</span>
+     <span class="fleetchip"><span class="dot err"></span>${c("error")} ERROR</span>
+     <span class="fleetchip"><span class="dot off"></span>0 OFFLINE</span>`;
+}
+function note() {
+  const wide = matchMedia("(min-width: 1000px) and (min-height: 560px)").matches;
+  const t = {
+    current: "CURRENT (v1.4): as many 280px columns as fit, panels 212px tall. On a fullscreen 1080p display all three printers sit in one short row and most of the screen is empty.",
+    proposed: "PROPOSED: two panels across; two rows fill the screen, so each panel is about half the display. Text, meters and the progress bar scale with the panel. A 5th+ printer scrolls to a third row. Narrow windows and phones keep the current layout.",
+  }[opt.layout];
+  const third = opt.layout === "proposed" && opt.n === 3 ? {
+    left: " 3RD PANEL A: sits bottom-left; the empty slot is where a 4th printer goes.",
+    center: " 3RD PANEL B: centered under the first two.",
+    vacant: " 3RD PANEL C: the open slot shows a powered-down 'BAY VACANT' panel, so the grid reads as intentional.",
+  }[opt.third] : "";
+  document.getElementById("note").textContent = t + third + (wide || opt.layout === "current" ? "" :
+    " (This window is narrower than 1000px or shorter than 560px, so the proposed layout falls back to the current one. Make the window fullscreen.)");
+  document.querySelectorAll('[data-k="third"]').forEach(b => b.disabled = !(opt.layout === "proposed" && opt.n === 3));
+}
+document.querySelectorAll("#ctl [data-k]").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.k;
+  document.querySelectorAll(`#ctl [data-k="${k}"]`).forEach(x => x.classList.toggle("on", x === b));
+  opt[k] = k === "layout" || k === "third" ? b.dataset.v : +b.dataset.v;
+  build();
+}));
+document.getElementById("hidebtn").onclick = e => {
+  const c = document.getElementById("ctl"); c.classList.toggle("min");
+  e.target.textContent = c.classList.contains("min") ? "MOCKUP CONTROLS ▴" : "HIDE ▾";
+};
+let resizeT;
+addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(build, 150); });
+setInterval(() => { document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8); }, 1000);
+setInterval(() => { tick++; camHolder = (camHolder + 1) % fleet().length; render(false); }, 4000);
+build();
+</script>
+</body>
+</html>
