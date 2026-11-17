@@ -14,6 +14,19 @@ log = logging.getLogger("labconsole.printer")
 # worth a log line: on cloud-connected firmware a refused command is often just dropped.
 REPLY_TIMEOUT = 10.0
 
+# HMS level is the third group of the code (the high 16 bits of "code"): 0001 error,
+# 0002 warning (pauses the print), 0003 info, 0000 invalid. Info entries are routine
+# ("first layer inspection in progress"), so they must never raise the ERROR state.
+_HMS_INFO_LEVELS = {0, 3}
+
+
+def _hms_level(h):
+    try:
+        return int(h.get("code") or 0) >> 16
+    except (TypeError, ValueError):
+        return 1  # unreadable: err on the side of showing it
+
+
 # gcode_state -> dashboard state
 _RUNNING = {"RUNNING", "PREPARE", "SLICING"}
 _PAUSED = {"PAUSE"}
@@ -209,7 +222,9 @@ class BambuPrinter:
         with self._lock:
             r = dict(self._report)
         gs = r.get("gcode_state", "")
-        hms = [h for h in (r.get("hms") or []) if isinstance(h, dict)]
+        entries = [h for h in (r.get("hms") or []) if isinstance(h, dict)]
+        hms = [h for h in entries if _hms_level(h) not in _HMS_INFO_LEVELS]
+        notices = [h for h in entries if _hms_level(h) == 3]
         err = int(r.get("print_error") or 0)
         if not self._online:
             state = "offline"
@@ -265,6 +280,7 @@ class BambuPrinter:
             "light": next((l.get("mode") for l in (r.get("lights_report") or [])
                            if l.get("node") == "chamber_light"), None),
             "hms": [{"attr": h.get("attr"), "code": h.get("code")} for h in hms],
+            "notices": [{"attr": h.get("attr"), "code": h.get("code")} for h in notices],
             "print_error": err,
         }
 

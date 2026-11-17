@@ -89,7 +89,7 @@ def setup_logging():
     return path
 
 
-_last_seen = {}  # printer id -> (state, hms codes, print_error) last logged
+_last_seen = {}  # printer id -> (state, hms codes, print_error, notices) last logged
 
 
 def _hms_code(h):
@@ -108,11 +108,16 @@ def _log_transition(p):
         log.exception("%s: building the printer view failed", getattr(p, "id", "?"))
         return
     hms = tuple(_hms_code(h) for h in v.get("hms") or [])
-    key = (v["state"], hms, v.get("print_error") or 0)
+    notices = tuple(_hms_code(h) for h in v.get("notices") or [])
+    key = (v["state"], hms, v.get("print_error") or 0, notices)
     prev = _last_seen.get(p.id)
     if prev == key:
         return
     _last_seen[p.id] = key
+    new_notices = [n for n in notices if not prev or n not in prev[3]]
+    if new_notices:
+        # level-3 HMS: informational only, never an ERROR (look up on Bambu's wiki)
+        log.info("%s: printer notice %s", p.id, ", ".join(new_notices))
     was = prev[0] if prev else "start"
     if v["state"] == "error":
         err = v.get("print_error") or 0

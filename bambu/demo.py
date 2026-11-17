@@ -159,6 +159,7 @@ class DemoPrinter:
                 "speed": "STANDARD",
                 "light": self._light,
                 "hms": list(self._hms),
+                "notices": [],
                 "print_error": 1 if s == "error" else 0,
             }
 

@@ -62,7 +62,12 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
        <code>chamber_temper</code>),
        <code>cooling_fan_speed</code>, <code>spd_lvl_name</code>, <code>lights_report</code>,
        AMS tray types and colors, and <code>hms</code> / <code>print_error</code> for the
-       ERROR state.</p>
+       ERROR state. The third group of an HMS code is its level: <code>0001</code> error,
+       <code>0002</code> warning (pauses the print), <code>0003</code> info. Only levels 0001
+       and 0002, or a nonzero <code>print_error</code>, set ERROR. Level 0003 entries are
+       routine notices (for example <code>0C00_0300_0003_000B</code>, first-layer inspection
+       in progress); they are sent as <code>notices</code> and written to the log, but do not
+       change the panel state.</p>
 
     <h2 id="s2"><span class="idx">02</span> CAMERA PROTOCOLS</h2>
     <table class="ref">

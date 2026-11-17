@@ -141,7 +141,10 @@ asyncio.run(main())"
   retry thread plus a discovery-spawned one, or two consoles) knocked each other offline every
   ~3 s. Don't reintroduce a second connection path.
 - **State derivation lives in `BambuPrinter.view()`**: `idle | printing | paused | error |
-  offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. If you add a
+  offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. Only HMS
+  entries at level 0001 (error) / 0002 (warning) count — the level is the code's third group
+  (`code >> 16`). Level 0003 is info (first-layer inspection, SD card notices) and goes to
+  `notices` + the log instead: treating it as ERROR made every printer flash red on connect. If you add a
   new derived field, add it here and it flows to the frontend automatically via the existing
   WebSocket push.
 - **Camera protocols differ by model** and this is load-bearing, not a detail: X1-series/H2D

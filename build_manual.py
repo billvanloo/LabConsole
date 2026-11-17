@@ -469,7 +469,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "mc_percent, mc_remaining_time, layer_num/total_layer_num, subtask_name/gcode_file, "
             "temperatures and targets (chamber falls back to device.ctc.info.temp, low 16 bits, "
             "when chamber_temper is absent), cooling_fan_speed, spd_lvl_name, lights_report, AMS tray "
-            "types/colors, and hms / print_error for the ERROR state."),
+            "types/colors, and hms / print_error for the ERROR state. The third group of an HMS code is "
+            "its level: 0001 error, 0002 warning (pauses the print), 0003 info. Only 0001/0002 or a "
+            "nonzero print_error set ERROR; level-0003 notices (e.g. 0C00_0300_0003_000B, first-layer "
+            "inspection in progress) are logged but do not change the panel state."),
           Paragraph("02 \u00b7 CAMERA PROTOCOLS", S["h2"]), rule()]
     e += ref_table(["MODELS", "TRANSPORT", "CONSOLE RELAY"], [
         ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace. Run with -tls_verify 0 (self-signed certificate); errors go to the log."],
