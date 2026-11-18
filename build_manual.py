@@ -267,7 +267,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("The status bar shows fleet totals, the clock, and a <b>LINK</b> indicator for the "
             "browser\u2019s connection to the Pi \u2014 if LINK is red, the view may be stale. Each "
             "printer is a bezel-framed panel, headed by its name in large glowing letters that stay "
-            "in place whichever face is showing. Each panel cycles every ~8 seconds between its status "
+            "in place whichever face is showing. Each panel cycles every ~10 seconds between its status "
             "readout, an ambient scanner animation (any printer not in ERROR or OFFLINE), and \u2014 "
             "for one printer at a time \u2014 the live camera slot. A panel is never more than "
             "three turns from its status readout. The state lamp in the panel header never cycles "

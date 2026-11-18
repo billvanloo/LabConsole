@@ -244,7 +244,7 @@ BOUNDARY = "labconsoleframe"
 
 # Newest JPEG seen per printer. A chamber camera takes ~3s to hand over its first
 # frame (TLS setup plus a ~1 FPS source) and a panel only holds the camera face
-# for ~8s, so a viewer arriving on a camera turn spent most of it staring at
+# for ~10s, so a viewer arriving on a camera turn spent much of it staring at
 # black. Replaying the last frame fills that gap instantly; the live stream
 # overwrites it as soon as it arrives. Only replayed while fresh — a stale image
 # must never sit under the LIVE tag. Costs one frame (~100KB) per printer.

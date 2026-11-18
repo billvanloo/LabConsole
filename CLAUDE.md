@@ -162,7 +162,7 @@ asyncio.run(main())"
   relays (`camera.max_streams`, default 1) and evicts the oldest on a new request — don't
   remove this cap, it's what keeps a Pi 3 alive. `server.py` also keeps the newest frame
   per printer (`_preview`, `PREVIEW_TTL` = 30s) and replays it immediately on connect:
-  measured time-to-first-frame on a chamber camera is ~3s, against an ~8s panel face
+  measured time-to-first-frame on a chamber camera is ~3s, against a ~10s panel face
   window, so without it most of a camera turn rendered black. ffmpeg runs with
   `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
   silently otherwise) — but older ffmpeg (the Pi's) has no such option on RTSPS inputs and
@@ -194,7 +194,7 @@ asyncio.run(main())"
   `BambuPrinter`, add the matching one to `DemoPrinter` or demo mode will throw on that action.
 - **Frontend has no framework and no build step.** `static/app.js` owns: WebSocket
   connect/reconnect, panel face-cycling (status / resting-animation / camera / print-complete,
-  ~8s rotation — see `panelFaceFor()`: every panel not in ERROR/OFFLINE alternates status with a
+  10s rotation, `CYCLE_MS` — see `panelFaceFor()`: every panel not in ERROR/OFFLINE alternates status with a
   resting instrument on a **period of 3**, never 2, because `camHolder` advances with `tick` and a
   period-2 test lands every rest turn on the status turn at two printers; ERROR/OFFLINE panels
   hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it.
@@ -213,10 +213,10 @@ asyncio.run(main())"
   celebrating, and it reads the *previous* push because `percent` goes null once idle. The face
   sits above camera and resting but below error/offline. Two load-bearing details: its canvas
   timing is anchored to `data-t0`, not to mount, so a remount resumes in place; and
-  `renderFleet`'s re-render guard excludes `complete` (as it does `cam`) so the 8s cycle can't
+  `renderFleet`'s re-render guard excludes `complete` (as it does `cam`) so the 10s cycle can't
   restart it mid-run. The detail view runs it too, replacing the camera block: `renderDetail`
   only rebuilds on `full`, so `detailCeleb` forces a rebuild when the flourish starts *and*
-  when it ends, and because the detail view has no 8s tick the hand-back is an explicit
+  when it ends, and because the detail view has no 10s tick the hand-back is an explicit
   `celebTimer` (cleared in `closeDetail`).
 
 ## Design language (read before touching CSS/HTML)
