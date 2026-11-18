@@ -266,7 +266,8 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("01 \u00b7 READING THE DASHBOARD", S["h2"]), rule(),
           P("The status bar shows fleet totals, the clock, and a <b>LINK</b> indicator for the "
             "browser\u2019s connection to the Pi \u2014 if LINK is red, the view may be stale. Each "
-            "printer is a bezel-framed panel that cycles every ~8 seconds between its status "
+            "printer is a bezel-framed panel, headed by its name in large glowing letters that stay "
+            "in place whichever face is showing. Each panel cycles every ~8 seconds between its status "
             "readout, an ambient scanner animation (any printer not in ERROR or OFFLINE), and \u2014 "
             "for one printer at a time \u2014 the live camera slot. A panel is never more than "
             "three turns from its status readout. The state lamp in the panel header never cycles "
@@ -423,7 +424,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("03 \u00b7 CONFIG REFERENCE \u2014 PER PRINTER", S["h2"]), rule()]
     e += ref_table(["FIELD", "MEANING"], [
         ["id", "Short unique key; used in URLs."],
-        ["name / model", "Display name and model label on the dashboard."],
+        ["name / model", "Display name (shown large and glowing in each panel header; keep it short, long names are cut off) and model label."],
         ["serial", "Printer serial \u2014 used for MQTT topics and SSDP matching."],
         ["access_code", "LAN access code from the printer screen."],
         ["ip", "Optional; discovery fills and updates it. A static/reserved address makes startup instant."],

@@ -36,7 +36,9 @@
        fleet totals (idle / printing / error / offline), the console clock, and a
        <b>LINK</b> indicator for the browser&rsquo;s connection to the Pi — if LINK is red,
        what you see may be stale.</p>
-    <p>Each printer is a bezel-framed panel. Panels <b>cycle automatically every ~8
+    <p>Each printer is a bezel-framed panel, headed by the printer&rsquo;s <b>name</b> in large
+       glowing letters. The name stays in the same place whichever face is showing, so you can
+       find a printer from across the room. Panels <b>cycle automatically every ~8
        seconds</b> between three faces: the status readout, an ambient scanner animation
        (any printer not in ERROR or OFFLINE, printing ones included), and — for one printer
        at a time — the live camera slot, which rotates through the fleet. A panel is never
@@ -87,7 +89,7 @@
       <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
         <div class="figrow">
           <div class="figpanel"><div class="crt">
-            <div class="phead"><span class="lamp printing"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+            <div class="phead"><span class="lamp printing"></span><span class="pname nameglow">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
             <div class="pbody">
               <div class="statword printing">PRINTING</div>
               <div class="fname">sensor_mount_bracket_v3.3mf</div>
@@ -98,7 +100,7 @@
               <span class="facechip">STATUS</span>
             </div></div></div>
           <div class="figpanel error"><div class="crt">
-            <div class="phead"><span class="lamp error"></span><span class="pname">SCOUT-03</span><span class="pmodel">A1 MINI</span></div>
+            <div class="phead"><span class="lamp error"></span><span class="pname nameglow">SCOUT-03</span><span class="pmodel">A1 MINI</span></div>
             <div class="pbody">
               <div class="statword error">ERROR</div>
               <div class="errline">HMS 0700-8000-0002-0001<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
@@ -115,11 +117,11 @@
       <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
         <div class="figrow">
           <div class="figpanel"><div class="crt">
-            <div class="phead"><span class="lamp idle"></span><span class="pname">OUTPOST-02</span><span class="pmodel">H2D</span></div>
+            <div class="phead"><span class="lamp idle"></span><span class="pname nameglow">OUTPOST-02</span><span class="pmodel">H2D</span></div>
             <div class="pbody"><canvas class="bganim" data-fig="radar"></canvas><span class="facechip">SCANNER · RESTING</span></div>
           </div></div>
           <div class="figpanel"><div class="crt">
-            <div class="phead"><span class="lamp idle"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+            <div class="phead"><span class="lamp idle"></span><span class="pname nameglow">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
             <div class="pbody"><canvas class="bganim" data-fig="orbit"></canvas><span class="facechip">SCANNER · RESTING</span></div>
           </div></div>
         </div>
@@ -139,7 +141,7 @@
     <figure class="shot">
       <div class="ph" style="padding:10px"><span class="livechip">LIVE FIGURE</span>
         <div class="figpanel"><div class="crt">
-          <div class="phead"><span class="lamp printing"></span><span class="pname">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+          <div class="phead"><span class="lamp printing"></span><span class="pname nameglow">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
           <div class="pbody"><canvas class="bganim" data-fig="camdemo"></canvas>
             <span class="camtag rec">LIVE</span><span class="camfoot">RTSPS :322 RELAY</span></div>
         </div></div>

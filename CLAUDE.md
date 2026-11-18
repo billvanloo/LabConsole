@@ -242,6 +242,12 @@ mockup round:
   opens with a `.dprog` block (reticle + file, time left, layer) whose cells then drop out of
   the readings grid (`.tcell.inprog`) — `mockups/detail-view-mockup.html`, option B. The
   reticle there is redrawn on every telemetry push, since `#telem` is rebuilt each time.
+- **The printer's name** (`config.json` `name`) heads every panel in `.nameglow`: the state
+  word's size (15px, or `clamp(15px,3.6cqw,40px)` on the two-across layout), the strongest
+  glow on the panel, and a faint stepped `phosphor` flicker (off under reduced motion). It sits
+  in the header so it never moves as faces cycle, and stays cyan in every state — identity,
+  not status. The detail header uses it too (`.dname`), and so do the docs figures, whose
+  `docs.css` carries a copy of the rule — `mockups/printer-name-mockup.html`, option A.
 - The detail view's way back is deliberately prominent: the lit `◂ FLEET OVERVIEW` header
   button, a fixed `▦ FLEET` corner button for touch screens, and Esc (ignored while a modal is
   open so it can't skip past a stop confirmation) — option D2 of the same mockup.
