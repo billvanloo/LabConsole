@@ -10,6 +10,7 @@ import logging
 import logging.handlers
 import pathlib
 import re
+import socket
 import sys
 import threading
 import time
@@ -373,8 +374,31 @@ async def index(request):
     return web.FileResponse(ROOT / "static" / "index.html")
 
 
+def port_taken(port):
+    """True if something already accepts connections on this port.
+
+    A connect test, not a bind test: SO_REUSEADDR (which aiohttp sets) lets a second
+    server bind the same port on macOS, and then the two split incoming requests, so a
+    browser gets broken pages from whichever one isn't a working console. A bind test
+    without SO_REUSEADDR would instead trip over TIME_WAIT on a quick restart."""
+    for host in ("127.0.0.1", "::1"):
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def main():
     logfile = setup_logging()
+    port = int(CFG.get("http_port", 8080))
+    if port_taken(port):
+        log.error("port %d is already in use, most likely by another Lab Console still "
+                  "running (another Terminal window, or one paused with Ctrl+Z). Stop it "
+                  "first, or set a different http_port in config.json. To see what holds "
+                  "the port: lsof -nP -iTCP:%d -sTCP:LISTEN", port, port)
+        sys.exit(1)
     try:
         version = re.search(r"^version:\s*(\S+)", (ROOT / "VERSION").read_text(), re.M)[1]
     except (OSError, TypeError):
@@ -425,7 +449,7 @@ def main():
     app.router.add_get("/api/{id}/files", files_handler)
     app.router.add_post("/api/{id}/upload", upload_handler)
     app.router.add_static("/static", ROOT / "static")
-    web.run_app(app, port=int(CFG.get("http_port", 8080)))
+    web.run_app(app, port=port)
 
 
 if __name__ == "__main__":
