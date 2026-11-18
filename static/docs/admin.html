@@ -82,6 +82,16 @@ nano config.json              # fill in serials + access codes
 .venv/bin/python server.py    # open http://&lt;pi-address&gt;:8080</code></pre>
     <p>To evaluate without printers, run <code>.venv/bin/python server.py --demo</code> — no
        config file is required.</p>
+    <h3>OPTIONAL: A NAME INSTEAD OF AN IP ADDRESS</h3>
+    <p>To open the console at <code>http://labconsole.local:8080</code> rather than the Pi&rsquo;s
+       address, run <code>sudo scripts/set-hostname.sh</code> (or pass another name, e.g.
+       <code>sudo scripts/set-hostname.sh printlab</code>). It renames the Pi, makes sure the
+       Avahi mDNS service is installed, running and starting at boot, then checks that the name
+       resolves and the console is listening, and prints the address to open.
+       <code>scripts/set-hostname.sh --check</code> reports without changing anything. Macs,
+       iPhones, Windows 10/11 and most Linux machines resolve <code>.local</code> names on their
+       own, on the same network as the Pi only; for other devices, ask IT for a DNS name pointing
+       at the Pi.</p>
     <div class="callout">
       <div class="ct">◈ WHY A VIRTUAL ENVIRONMENT</div>
       <p>Current Raspberry Pi OS (Bookworm and later) and Ubuntu 23.04+ refuse a plain
