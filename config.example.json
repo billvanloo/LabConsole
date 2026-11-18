@@ -8,7 +8,8 @@
     "rediscover_after_s": 30,
     "subnet_scan": true,
     "scan_subnets": [],
-    "min_interval_s": 60
+    "min_interval_s": 60,
+    "max_empty_scans": 3
   },
   "camera": {
     "max_streams": 1,

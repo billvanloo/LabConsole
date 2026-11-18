@@ -113,7 +113,9 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
     </ol>
     <p>A hit calls the same <code>set_ip()</code> path as an announcement. Passes are at
        least <code>discovery.min_interval_s</code> apart and back off to 10 minutes while
-       they find nothing. While a printer is offline, <code>/cam/&lt;id&gt;</code> returns
+       they find nothing. After <code>discovery.max_empty_scans</code> (3) scans in a row
+       miss a printer, it is dropped from the subnet scan until it reconnects; SSDP search
+       continues. While a printer is offline, <code>/cam/&lt;id&gt;</code> returns
        503 instead of starting a relay against a dead address.</p>
 
     <h2 id="s4"><span class="idx">04</span> WEBSOCKET SCHEMA</h2>

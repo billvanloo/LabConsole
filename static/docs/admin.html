@@ -151,7 +151,8 @@ python3 -m venv .venv
       <tr><td>discovery.rediscover_after_s</td><td>30</td><td>How long a printer must be unreachable before the console goes looking for it at a new address.</td></tr>
       <tr><td>discovery.subnet_scan</td><td>true</td><td>Last-resort search: probe the local /24 for printers on port 8883. Each candidate is identified by the serial in its TLS certificate, or by logging in with the missing printer's access code. Turn off if port scans on your network are unwelcome.</td></tr>
       <tr><td>discovery.scan_subnets</td><td>[]</td><td>Subnets to scan, e.g. <code>["192.168.20.0/24"]</code>. Empty means the console host's own /24.</td></tr>
-      <tr><td>discovery.min_interval_s</td><td>60</td><td>Minimum time between search passes. Passes that find nothing back off, doubling up to 10 minutes, so a printer that is simply switched off isn't scanned all weekend.</td></tr>
+      <tr><td>discovery.min_interval_s</td><td>60</td><td>Minimum time between search passes. Passes that find nothing back off, doubling up to 10 minutes.</td></tr>
+      <tr><td>discovery.max_empty_scans</td><td>3</td><td>After this many subnet scans in a row miss a printer, it isn't scanned for again until it reconnects, so a printer switched off for the night doesn't have the network swept every 10 minutes. The SSDP search keeps running. 0 means no limit.</td></tr>
       <tr><td>camera.max_streams</td><td>1</td><td>Concurrent camera relays. Keep at 1 on a Pi 3; a Pi 4/5 can take more. A new viewer evicts the oldest when the limit is hit.</td></tr>
       <tr><td>camera.rtsp_fps</td><td>8</td><td>Relay frame rate for RTSPS cameras (transcode cost knob).</td></tr>
       <tr><td>camera.rtsp_width</td><td>640</td><td>Relay width for RTSPS cameras.</td></tr>

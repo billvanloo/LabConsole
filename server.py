@@ -422,7 +422,8 @@ def main():
             rediscover_after_s=float(dcfg.get("rediscover_after_s", 30)),
             subnet_scan=bool(dcfg.get("subnet_scan", True)),
             scan_subnets=dcfg.get("scan_subnets") or None,
-            min_interval_s=float(dcfg.get("min_interval_s", 60)))
+            min_interval_s=float(dcfg.get("min_interval_s", 60)),
+            max_empty_scans=int(dcfg.get("max_empty_scans", 3)))
 
     @web.middleware
     async def revalidate_static(request, handler):

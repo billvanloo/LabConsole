@@ -237,20 +237,24 @@ class Rediscovery:
 
     A printer offline for `rediscover_after_s` triggers a pass: SSDP search, then (if
     enabled) a subnet scan for whoever is still missing. Passes are at least
-    `min_interval_s` apart; passes that find nothing back off, doubling up to 10 minutes,
-    so a printer that's simply switched off isn't scanned all weekend.
+    `min_interval_s` apart; passes that find nothing back off, doubling up to 10 minutes.
+    A printer the subnet scan has missed `max_empty_scans` times in a row isn't scanned
+    again until it reconnects (SSDP search continues), so a printer that's simply
+    switched off for the night doesn't have the network swept every 10 minutes.
     """
 
     POLL_S = 5
 
     def __init__(self, printers, on_found, rediscover_after_s=30, subnet_scan=True,
-                 scan_subnets=None, min_interval_s=60):
+                 scan_subnets=None, min_interval_s=60, max_empty_scans=3):
         self.printers = printers            # {id: BambuPrinter}
         self.on_found = on_found            # on_found(serial, ip), same as the listener's
         self.grace = rediscover_after_s
         self.do_scan = subnet_scan
         self.scan_subnets = scan_subnets or []
         self.min_interval_s = min_interval_s
+        self.max_empty_scans = max_empty_scans  # 0 = no limit
+        self._empty_scans = {}              # printer id -> scans in a row that missed it
         self._interval = min_interval_s
         self._last_pass = -1e9
         threading.Thread(target=self._run, name="rediscovery", daemon=True).start()
@@ -258,6 +262,9 @@ class Rediscovery:
     def _run(self):
         while True:
             time.sleep(self.POLL_S)
+            for p in self.printers.values():
+                if p.online:
+                    self._empty_scans.pop(p.id, None)
             lost = [p for p in self.printers.values()
                     if not p.online and p.offline_for() >= self.grace]
             if not lost:
@@ -279,22 +286,33 @@ class Rediscovery:
             p = missing.pop(serial, None)
             if p:
                 self._found(p, ip, "SSDP search")
-        if missing and self.do_scan:
+        to_scan = {s: p for s, p in missing.items() if self._may_scan(p)}
+        if to_scan and self.do_scan:
             subnets = self.scan_subnets or local_subnets()
             if subnets:
                 log.info("rediscovery: scanning %s for %s", ", ".join(subnets),
-                         ", ".join(p.id for p in missing.values()))
+                         ", ".join(p.id for p in to_scan.values()))
                 taken = {p.ip for p in self.printers.values() if p.online and p.ip}
-                hits = subnet_scan({s: p.access_code for s, p in missing.items()},
+                hits = subnet_scan({s: p.access_code for s, p in to_scan.items()},
                                    subnets, skip=taken)
                 for serial, (ip, how) in hits.items():
                     self._found(missing.pop(serial), ip, f"scan, {how}")
+                for serial, p in to_scan.items():
+                    if serial in missing:
+                        n = self._empty_scans[p.id] = self._empty_scans.get(p.id, 0) + 1
+                        if self.max_empty_scans and n >= self.max_empty_scans:
+                            log.info("rediscovery: %s not found by %d scans in a row; no more "
+                                     "scans for it until it reconnects (SSDP search continues)",
+                                     p.id, n)
         if len(missing) == len(lost):
             self._interval = min(self._interval * 2, 600)
         else:
             self._interval = self.min_interval_s
         for p in missing.values():
             log.info("rediscovery: %s not found; next try in %ds", p.id, self._interval)
+
+    def _may_scan(self, p):
+        return not self.max_empty_scans or self._empty_scans.get(p.id, 0) < self.max_empty_scans
 
     def _found(self, p, ip, how):
         if ip == p.ip:

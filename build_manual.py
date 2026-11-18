@@ -452,6 +452,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["discovery.subnet_scan", "true", "Last resort: probe the local /24 on port 8883; identify by TLS certificate serial or access-code login."],
         ["discovery.scan_subnets", "[]", "Subnets to scan; empty means the host's own /24."],
         ["discovery.min_interval_s", "60", "Minimum time between search passes; empty passes back off up to 10 min."],
+        ["discovery.max_empty_scans", "3", "Subnet scans in a row that miss a printer before it stops being scanned for, until it reconnects; SSDP search continues. 0 = no limit."],
         ["camera.max_streams", "1", "Concurrent camera relays; keep 1 on a Pi 3. New viewers evict the oldest."],
         ["camera.rtsp_fps / rtsp_width", "8 / 640", "RTSPS transcode cost knobs."],
         ["sdcard_url_base", "file:///sdcard/", "Switch to file:///mnt/sdcard/ if start-print reports file-not-found."],
@@ -548,7 +549,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "discovery.rediscover_after_s triggers a pass: active M-SEARCH probes, then, for any "
             "still missing, a scan of the local /24 for TCP 8883, identifying each candidate by "
             "the serial in its TLS certificate CN, else by an MQTT login with the printer\u2019s own "
-            "access code. Passes back off to 10 minutes while they find nothing; /cam/<id> returns "
+            "access code. Passes back off to 10 minutes while they find nothing, and after "
+            "discovery.max_empty_scans (3) scans in a row miss a printer it is no longer scanned "
+            "for until it reconnects (SSDP search continues); /cam/<id> returns "
             "503 while the printer is offline."),
           Paragraph("04 \u00b7 WEBSOCKET SCHEMA", S["h2"]), rule(),
           CODE('{ "type":"fleet", "version":123, "demo":false, "printers":[ {\n'

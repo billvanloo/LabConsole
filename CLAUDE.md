@@ -200,7 +200,9 @@ asyncio.run(main())"
   TCP 8883 that identifies hosts by TLS-cert CN, falling back to an MQTT login with the
   missing printer's access code. A hit goes through the same `on_found` → `set_ip()` path
   as an announcement, so `_run()` is still the only place a client is created. Passes back
-  off to 10 min while empty. `/cam/<id>` returns 503 while a printer is offline.
+  off to 10 min while empty, and after `discovery.max_empty_scans` (default 3) scans in a row
+  miss a printer it drops out of the scan until it reconnects (SSDP search continues) —
+  powered-off lab printers otherwise meant a /24 sweep every 10 min all night. `/cam/<id>` returns 503 while a printer is offline.
 - **Testing discovery without printers:** `tests/fake_printer.py` in the 1.7 handoff is a
   TLS server speaking enough MQTT 3.1.1 (CONNECT with password check, SUBSCRIBE, PING,
   report PUBLISH). Bind fakes on 127.0.0.x, set `discovery.scan_subnets` to
