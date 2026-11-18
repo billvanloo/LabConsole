@@ -273,14 +273,21 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "three turns from its status readout. The state lamp in the panel header never cycles "
             "away. Tap any panel for its detail console."),
           Paragraph("THE LAYER STACK", S["h3"]),
-          P("While a printer is printing or paused, its animation turns alternate between the "
-            "scanner animations and the layer stack, a picture of the job itself. Each block is one "
+          P("While a printer is printing or paused, its animation turns cycle through the layer "
+            "stack, the progress cube (below), and the scanner animations. The layer stack is a "
+            "picture of the job itself. Each block is one "
             "layer: finished layers stack bottom-up, left to right, as glowing cyan blocks; the layer "
             "being printed glows amber and pulses, then flashes white and settles into the stack. "
             "While paused, that block turns violet and stops pulsing. The dashed rounded rectangle is "
             "the whole job, with faint outlines for the layers still to come; the readout at the "
             "bottom left gives the layer and percentage. On very tall prints each block stands for "
             "several layers, and a 1 BLOCK = N LAYERS note appears in the corner."),
+          Paragraph("THE PROGRESS CUBE", S["h3"]),
+          P("A tapered wedge meter on the left fills with the job\u2019s progress, with the percentage "
+            "above it and a bright line and marker at the fill edge. On the right, a glowing wireframe "
+            "cube spins inside a reticle while printing; when paused it holds still and the markers "
+            "turn violet. Idle printers show it as one of their resting faces: the meter reads "
+            "STANDBY and the cube drifts slowly."),
           P("On a wide screen, such as a fullscreen lab display, panels are laid out two across "
             "and two rows fill the screen, so each panel takes about a quarter of the display, "
             "with text and meters scaled to match. A third printer sits bottom-left, leaving the "
@@ -521,7 +528,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("<b>FTPS</b> \u2014 implicit TLS on port 990, user bblp. Lists .3mf/.gcode in the SD "
             "root (MLSD with NLST fallback) and uploads new files ahead of a project_file "
             "command."),
-          P("<b>SSDP</b> \u2014 passive listener on UDP 2021 and 1990 for printer announcements, "
+          P("<b>SSDP</b> \u2014 passive listener on UDP 2021 and 1990 for printer announcements, joining "
+            "the multicast group 239.255.255.250 they are sent to (Linux delivers multicast only to a "
+            "host that has joined it), "
             "matching serial in USN and address in Location. On address change the MQTT client "
             "reconnects. If another app holds the port, discovery is skipped and configured IPs "
             "are used."),

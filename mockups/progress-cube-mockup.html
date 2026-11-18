@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Console — Progress Cube Mockup</title>
+<!-- APPROVED: option A (single meter + cube), smooth spin; ported to static/app.js in v1.6.0,
+     in the printing rotation (stack, cube, instrument) and as an idle resting face.
+     Mockup for review: a new panel face modelled on the owner's Galaxy's Edge reference photo.
+     Left: tapered wedge meters driven by the active print. Right: the reference's craft
+     replaced by a spinning, glowing wireframe cube in isometric view inside a reticle.
+     Panel CSS and fit()/loop() are copied from static/style.css and static/app.js. -->
+<style>
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+/* The printer's display name (config.json "name"): the state word's typeface and size, in
+   the header above every face so it never moves as faces cycle, with a stronger phosphor glow
+   than anything else on the panel and a faint stepped flicker. Cyan in every state: it is
+   identity, not status, and red stays error-only. Approved as option A of
+   mockups/printer-name-mockup.html. */
+.nameglow{color:#e6fbff;letter-spacing:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  text-shadow:0 0 1px #fff, 0 0 5px rgba(63,216,255,.95), 0 0 12px rgba(63,216,255,.75),
+              0 0 26px rgba(63,216,255,.45), 0 0 44px rgba(63,216,255,.22);
+  animation:phosphor 7s steps(1) infinite}
+@keyframes phosphor{0%{opacity:1}61%{opacity:.84}62%{opacity:1}63%{opacity:.9}64%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.nameglow{animation:none}}
+.phead{gap:10px}
+.phead .lamp{width:12px;height:12px}
+.phead .pname{font-size:15px}
+/* the model label keeps its line when a long name is cut short */
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto;white-space:nowrap;flex:0 0 auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+/* Wide, tall screens (a fullscreen lab display): two panels across, and two rows fill
+   the screen, so a 3-4 printer fleet gets about a quarter of the display per panel. A 3rd
+   printer sits bottom-left, keeping the slot a 4th will fill; a 5th+ scrolls to a third
+   row. Type and meters scale with the panel through container units, so the readout
+   carries across the room. Narrow windows and phones keep the auto-fit grid above.
+   Approved in mockups/fleet-layout-mockup.html (option A). */
+@media (min-width:1000px) and (min-height:560px){
+  #fleet{container-type:size}
+  #fleet .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc((100cqh - 36px) / 2)}
+  #fleet .ppanel{display:flex}
+  #fleet .ppanel .crt{flex:1;min-height:0;container-type:inline-size}
+  #fleet .phead{font-size:clamp(11px,1.45cqw,16px);padding:1.4cqw 1.8cqw 1cqw;gap:1.4cqw}
+  #fleet .phead .pname{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .phead .lamp{width:clamp(12px,1.9cqw,22px);height:clamp(12px,1.9cqw,22px)}
+  #fleet .phead .pmodel{font-size:clamp(9px,1.1cqw,13px)}
+  #fleet .pbody{padding:1.2cqw 2.2cqw 1.8cqw;gap:clamp(7px,1.3cqw,16px)}
+  #fleet .statword{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .fname{font-size:clamp(11px,2.1cqw,22px)}
+  #fleet .kv,#fleet .errline{font-size:clamp(10px,1.8cqw,19px)}
+  #fleet .progrow{gap:1.6cqw}
+  #fleet .pbar{height:clamp(10px,1.7cqw,18px)}
+  #fleet .ppct{font-size:clamp(12px,2.8cqw,30px)}
+  /* the markup pins the wedge at 34px; wedge() sizes its drawing from the CSS box */
+  #fleet canvas.wedge{width:clamp(34px,6.5cqw,72px)!important;height:clamp(34px,6.5cqw,72px)!important}
+  #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
+  #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
+  #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackread{font-size:clamp(9px,1.3cqw,15px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackbucket{font-size:clamp(8px,1.1cqw,13px);right:1.6cqw;top:.6cqw}
+
+  /* status faces with progress get a large open-arc reticle beside the readout, filling the
+     band that otherwise sits empty at this size (option C of
+     mockups/large-panel-options-mockup.html). The reticle replaces the small wedge here. */
+  #fleet .pbody:has(>canvas.reticle){display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  #fleet .pbody:has(>canvas.reticle)>:is(.statword,.fname,.kv,.errline){grid-column:1}
+  #fleet .pbody>canvas.reticle{display:block;grid-column:2;grid-row:1 / 6;align-self:center;
+    width:min(40cqw,100%);aspect-ratio:1;height:auto}
+  #fleet .pbody:has(>canvas.reticle)>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  #fleet .pbody:has(>canvas.reticle) canvas.wedge{display:none}
+  /* idle faces have no progress to show: center their readout instead */
+  #fleet .pbody:has(>.statword.idle){justify-content:center}
+}
+/* outside the two-across layout the reticle stays hidden and the small wedge does the job */
+canvas.reticle{display:none}
+
+/* Detail view on a wide, tall screen: fill it. The camera takes the left column above
+   larger controls; the readings fill the right column and scale with it (container
+   units), headed by a progress block with the reticle. Narrow windows keep the layout
+   above, without the block. Approved as option B of mockups/detail-view-mockup.html
+   (issue #6). */
+.dprog{display:none}
+@media (min-width:1000px) and (min-height:560px){
+  #detail .dhead{padding:12px 14px}
+  #detail .dstate{font-size:16px;letter-spacing:.3em}
+  #detail .detailgrid{flex:1;min-height:0;grid-template-columns:1.35fr .65fr;grid-template-rows:minmax(0,1fr)}
+  #detail .dblock{display:flex;flex-direction:column;min-height:0}
+  #detail .dcrt.cam{flex:1;min-height:0}
+  #detail .dcrt.cam canvas,#detail .dcrt.cam img{height:100%!important;width:100%}
+  #detail .camtag{font-size:13px;left:14px;top:12px}
+  #detail .ctrls{gap:10px;padding:14px 4px 4px}
+  #detail .cbtn{font-size:15px;padding:20px 8px}
+  /* the right column stops short of the fixed corner FLEET button */
+  #detail .detailgrid>.dblock:last-child{margin-bottom:78px;container-type:inline-size}
+  #telem{flex:1;min-height:0;display:flex;flex-direction:column}
+  #telem .telem{flex:1;grid-auto-rows:1fr}
+  #telem .tcell{padding:1.6cqw 2.4cqw;display:flex;flex-direction:column;justify-content:center}
+  #telem .tcell .tl{font-size:clamp(9px,1.7cqw,14px);margin-bottom:.8cqw}
+  #telem .tcell .tv{font-size:clamp(17px,4.6cqw,42px)}
+  #telem .tcell .tv small{font-size:clamp(10px,2cqw,18px)}
+  #telem .tcell .tv.file{font-size:clamp(11px,2.6cqw,22px)}
+  #telem .tcell.inprog{display:none}
+  /* five readings left below the block: the last spans the row so no slot sits empty */
+  #telem .telem>.tcell:last-child{grid-column:1 / -1}
+  #telem .amslbl{font-size:clamp(9px,1.5cqw,13px);padding:1.6cqw 2.4cqw 0}
+  #telem .ams{padding:1.4cqw 2.4cqw 2cqw;gap:1.4cqw}
+  #telem .slot{font-size:clamp(9px,1.6cqw,14px);padding:1.2cqw 1.4cqw}
+  #telem .slot i{height:clamp(5px,1cqw,9px);margin-bottom:1cqw}
+  #telem .hmsbox{font-size:clamp(10px,2.4cqw,20px);padding:1.6cqw 2.4cqw}
+  #telem .dprog{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2.6cqw;align-items:center;
+    padding:2cqw 2.4cqw;border-bottom:1px solid #101c36;background:var(--panel-deep)}
+  #telem .dprog.noret{grid-template-columns:1fr}
+  #telem .dprog canvas.reticle{display:block;width:min(34cqw,260px);aspect-ratio:1;height:auto}
+  #telem .dprog .tl{font-size:clamp(9px,1.7cqw,14px);letter-spacing:.25em;color:var(--text-dim);margin:1.2cqw 0 .5cqw}
+  #telem .dprog .tl:first-child{margin-top:0}
+  #telem .dprog .file{font-size:clamp(11px,2.6cqw,22px);color:#bfe9ff;word-break:break-all;line-height:1.35}
+  #telem .dprog .big{font-size:clamp(20px,6cqw,56px);color:var(--amber)}
+  #telem .dprog .big.vi{color:var(--violet)} #telem .dprog .big.al{color:var(--alert)}
+  #telem .dprog .big.idle{color:var(--cyan)} #telem .dprog .big.offline{color:#3a4a66}
+  #telem .dprog .mid{font-size:clamp(14px,3.6cqw,32px);color:var(--cyan)}
+  #telem .dprog .mid small{font-size:.55em;color:var(--text-dim)}
+}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+/* layer stack overlays (mockups/layer-stack-mockup.html) */
+.stackread{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+  letter-spacing:.15em;z-index:2}
+.stackread b{color:var(--cyan);font-weight:400}
+.stackbucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+  color:var(--amber);z-index:2}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+.camtag.dim{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+/* ---------- detail view ---------- */
+#detail{flex:1;display:flex;flex-direction:column;overflow:auto}
+.dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
+  letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
+.dhead .lamp{width:9px;height:9px;border-radius:50%}
+/* the way back to the fleet is lit and sized to find at a glance, plus a corner button in
+   thumb reach on a touch screen; Esc also works (mockups/large-panel-options-mockup.html, D2) */
+.backbtn{font-family:inherit;font-size:13px;letter-spacing:.25em;padding:11px 20px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+.backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetfab:hover{background:rgba(14,26,52,.95)}
+.dstate{margin-left:auto;font-size:11px;color:var(--amber)}
+.dhead .dname{font-size:22px}
+.detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
+@media (max-width:720px){.detailgrid{grid-template-columns:1fr}}
+.dblock{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:14px;padding:8px}
+.dcrt{position:relative;background:var(--panel-deep);border-radius:9px;
+  border:1px solid #0d1526;overflow:hidden}
+.dcrt.cam{min-height:250px;display:flex;align-items:center;justify-content:center}
+.dcrt.cam img{width:100%;height:250px;object-fit:contain;background:#04060c}
+.telem{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#101c36}
+.tcell{background:var(--panel-deep);padding:10px 12px}
+.tcell .tl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-bottom:5px}
+.tcell .tv{font-size:17px;color:var(--cyan)}
+.tcell .tv small{font-size:10px;color:var(--text-dim)}
+.tcell .tv.warm{color:var(--amber)}
+.tcell .tv.file{font-size:11px;line-height:1.5;word-break:break-all}
+.amslbl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);padding:10px 12px 0}
+.ams{display:flex;gap:8px;padding:10px 12px;background:var(--panel-deep)}
+.slot{flex:1;border:1px solid #1c2a4a;border-radius:4px;padding:7px 8px;
+  font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.slot i{display:block;height:5px;border-radius:2px;margin-bottom:6px;background:#2a3247}
+.hmsbox{padding:10px 12px;font-size:10px;color:#ffb49b;line-height:1.6;background:var(--panel-deep)}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.cbtn{font-family:inherit;font-size:11px;letter-spacing:.25em;padding:13px 6px;
+  border-radius:6px;cursor:pointer;background:rgba(63,216,255,.05);
+  border:1px solid var(--cyan-dim);color:var(--cyan)}
+.cbtn:disabled{opacity:.3;cursor:default}
+.cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
+.cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
+.cbtn.wide{grid-column:1/-1;border-style:dashed}
+
+/* ---------- modals ---------- */
+.dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;
+  align-items:center;justify-content:center;z-index:50}
+.modal{width:min(440px,92%);background:var(--bezel);border:1px solid #3a1c12;
+  border-radius:12px;padding:8px;box-shadow:0 0 30px rgba(255,90,42,.15)}
+.modal .inner{border:1px solid #2a1108;border-radius:8px;background:var(--panel-deep);padding:18px}
+.modal h3{font-size:13px;letter-spacing:.3em;color:var(--alert);margin-bottom:10px}
+.modal p{font-size:11px;color:#9fb4d2;line-height:1.6;margin-bottom:16px;word-break:break-word}
+.modal .row{display:flex;gap:8px}
+.modal.cyanline{border-color:#1c2a4a;box-shadow:0 0 30px rgba(63,216,255,.1)}
+.modal.cyanline .inner{border-color:#14203d}
+.modal.cyanline h3{color:var(--cyan)}
+.flist{list-style:none;margin-bottom:14px;border:1px solid #14203d;border-radius:4px;
+  max-height:180px;overflow:auto}
+.flist li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;
+  font-size:10.5px;border-bottom:1px solid #0e1830;color:#bfe9ff;cursor:pointer}
+.flist li span{color:var(--text-dim)}
+.flist li.sel{background:rgba(63,216,255,.08);outline:1px solid var(--cyan-dim)}
+.flist li.empty{color:var(--text-dim);cursor:default;justify-content:center}
+.upl{border:1px dashed #1c2a4a;border-radius:4px;text-align:center;color:var(--text-dim);
+  font-size:10px;letter-spacing:.2em;padding:12px;margin-bottom:14px;cursor:pointer}
+.upl.busy{color:var(--amber);border-color:#8c5a1e}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:var(--bezel);border:1px solid var(--cyan-dim);color:var(--cyan);
+  font-size:10px;letter-spacing:.2em;padding:9px 16px;border-radius:6px;z-index:60;
+  box-shadow:0 0 18px rgba(63,216,255,.15)}
+.toast.err{border-color:#8c2c12;color:var(--alert)}
+.hidden{display:none !important}
+
+
+/* ================= mockup-only review controls (not part of the proposal) ================= */
+.mockctl{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:50;display:flex;flex-wrap:wrap;
+  gap:12px;align-items:center;justify-content:center;background:rgba(6,10,22,.95);border:1px solid #2a3a5c;
+  border-radius:8px;padding:7px 12px;font-size:9px;letter-spacing:.2em;color:var(--text-dim);
+  box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:calc(100vw - 20px)}
+.mockctl .g{display:flex;align-items:center;gap:5px}
+.mockctl b{color:#8fa6c8;font-weight:400;margin-right:3px}
+.mockctl button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);font-family:inherit;
+  font-size:9px;letter-spacing:.15em;padding:4px 8px;border-radius:3px;cursor:pointer}
+.mockctl button.on{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(63,216,255,.08)}
+.mockctl.min>.g,.mockctl.min>.mocknote{display:none}
+.mocknote{flex-basis:100%;font-size:10px;line-height:1.6;letter-spacing:.04em;color:#90a9c8;max-width:1100px;text-align:center}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="statusbar">
+    <span class="title">LAB CONSOLE</span>
+    <span class="glyphs">⌌⍚⌏ ⍙⌇⍜ ⌈⍑⌋</span>
+    <span class="spacer"></span>
+    <span class="linkstate">LINK OK</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+  <div id="fleet"><div class="grid" id="grid"></div></div>
+</div>
+<div class="mockctl" id="ctl">
+  <div class="mocknote" id="note"></div>
+  <span class="g"><b>LAYOUT</b><button data-k="layout" data-v="single">A · SINGLE</button><button data-k="layout" data-v="rows" class="on">B · THREE ROWS</button></span>
+  <span class="g"><b>SPIN</b><button data-k="motion" data-v="smooth" class="on">SMOOTH</button><button data-k="motion" data-v="stepped">STEPPED</button></span>
+  <span class="g"><b>JOB SPEED</b><button data-k="speed" data-v="1" class="on">REAL-ISH</button><button data-k="speed" data-v="20">FAST</button></span>
+  <button id="hidebtn">HIDE ▾</button>
+</div>
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
+const OK = "#57e0b8";   // --ok, the palette's success hue; alert red stays fault-only
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+const OPT = { layout: "rows", motion: "smooth", speed: "1" };
+const FLEET = [
+  { id: "panda", name: "Panda X1C", model: "X1C", state: "printing", percent: 54, layer: 61, total_layers: 112, remaining_min: 38, nozzle: 220, nozzle_target: 220 },
+  { id: "lemur", name: "Lemur X1C", model: "X1C", state: "paused", percent: 17, layer: 49, total_layers: 286, remaining_min: 108, nozzle: 218, nozzle_target: 220 },
+  { id: "elephant", name: "Elephant H2D", model: "H2D", state: "printing", percent: 4, layer: 1, total_layers: 102, remaining_min: 140, nozzle: 96, nozzle_target: 250 },
+  { id: "bay4", name: "Bay 4 A1", model: "A1", state: "idle", percent: null, layer: null, total_layers: 0, remaining_min: null, nozzle: 27, nozzle_target: 0 },
+];
+const WORD = { printing: "PRINTING", paused: "PAUSED", idle: "IDLE" };
+
+/* ============ PROPOSED FACE: progress meters + spinning isometric cube ============
+   Modelled on the owner's Galaxy's Edge reference photo (tapered wedge meters on the left,
+   reticled craft on the right); the craft become a glowing wireframe cube in isometric view.
+   Colours follow the console's fixed meanings: cyan structure, amber live markers (violet
+   when paused), never orange. Glow is drawn as stacked wide/narrow strokes rather than
+   shadowBlur, which is cheaper on a Pi 3. */
+const CUBE_PITCH = Math.atan(1 / Math.SQRT2);   // isometric tilt (35.26 deg)
+const CUBE_YAW0 = Math.PI / 4;                  // with the tilt, the classic isometric hexagon at rest
+const CUBE_V = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+const CUBE_E = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+
+function glowLine(c, pts, col, w, closed) {
+  // three passes: wide faint halo, mid glow, bright core
+  for (const [lw, a] of [[w * 5, .10], [w * 2.4, .28], [w, 1]]) {
+    c.globalAlpha = a; c.lineWidth = lw; c.strokeStyle = col; c.beginPath();
+    pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+    if (closed) c.closePath();
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+}
+function drawCube(c, cx, cy, s, yaw, col) {
+  yaw += CUBE_YAW0;
+  const cp = Math.cos(CUBE_PITCH), sp = Math.sin(CUBE_PITCH), cy_ = Math.cos(yaw), sy = Math.sin(yaw);
+  const P = CUBE_V.map(([x, y, z]) => {
+    const x1 = x * cy_ + z * sy, z1 = -x * sy + z * cy_;          // yaw about the vertical axis
+    const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;           // fixed isometric pitch
+    return [cx + x1 * s, cy + y2 * s, z2];
+  });
+  CUBE_E.forEach(([a, b]) => {
+    const back = (P[a][2] + P[b][2]) / 2 < -0.35;                 // dim the edges facing away
+    if (back) { c.globalAlpha = .28; c.lineWidth = 1; c.strokeStyle = col; c.beginPath();
+      c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke(); c.globalAlpha = 1; }
+    else glowLine(c, [P[a], P[b]], col, Math.max(1.1, s * 0.035));
+  });
+  // a hot core at the centre, like the reference's bright craft
+  const g = c.createRadialGradient(cx, cy, 0, cx, cy, s * 1.1);
+  g.addColorStop(0, "rgba(63,216,255,.22)"); g.addColorStop(1, "rgba(63,216,255,0)");
+  c.fillStyle = g; c.fillRect(cx - s * 1.2, cy - s * 1.2, s * 2.4, s * 2.4);
+}
+function wedgeMeter(c, x, y, w, h, frac, live, mark) {
+  // tapered wedge: thin at the left, full height at the right, ticks across the whole span
+  const ticks = 10, base = y + h, tip = h * 0.22;
+  const topAt = t => base - (tip + (h - tip) * t);
+  // ticks
+  c.strokeStyle = "rgba(63,216,255,.55)"; c.lineWidth = 1;
+  for (let i = 0; i <= ticks; i++) { const tx = x + w * i / ticks; c.beginPath(); c.moveTo(tx, y); c.lineTo(tx, base); c.stroke(); }
+  // filled wedge up to the progress point
+  if (frac > 0) {
+    const fx = x + w * frac;
+    c.fillStyle = "rgba(108,200,255,.78)"; c.beginPath();
+    c.moveTo(x, base); c.lineTo(x, topAt(0)); c.lineTo(fx, topAt(frac)); c.lineTo(fx, base); c.closePath(); c.fill();
+  }
+  // bracket caps at each end
+  const cap = Math.max(6, w * .035);
+  glowLine(c, [[x + cap, y], [x, y], [x, base], [x + cap, base]], CY, 1.4);
+  glowLine(c, [[x + w + cap * 2, y], [x + w + cap * 3, y], [x + w + cap * 3, base], [x + w + cap * 2, base]], CY, 1.4);
+  // live marker: a bright line at the fill edge with a triangle under it
+  const fx = x + w * Math.max(0, Math.min(1, frac));
+  if (live) {
+    glowLine(c, [[fx, y - h * .06], [fx, base + h * .06]], mark, 2.2);
+    const tz = Math.max(6, h * .13);
+    c.fillStyle = CY; c.beginPath(); c.moveTo(fx, base + h * .16); c.lineTo(fx - tz * .7, base + h * .16 + tz); c.lineTo(fx + tz * .7, base + h * .16 + tz); c.closePath(); c.fill();
+  }
+}
+function sideScale(c, x, y, h, frac, mark) {
+  // the reference's vertical tick column, with a marker at the row's value
+  const n = 16;
+  c.strokeStyle = "rgba(63,216,255,.7)"; c.lineWidth = 1.2;
+  for (let i = 0; i <= n; i++) { const ty = y + h * i / n, len = i % 4 === 0 ? 9 : 5; c.beginPath(); c.moveTo(x, ty); c.lineTo(x + len, ty); c.stroke(); }
+  if (frac != null) { const ty = y + h * (1 - frac), tz = 7;
+    c.fillStyle = mark; c.beginPath(); c.moveTo(x - 3, ty); c.lineTo(x - 3 - tz * 1.4, ty - tz); c.lineTo(x - 3 - tz * 1.4, ty + tz); c.closePath(); c.fill(); }
+}
+function reticleRing(c, cx, cy, r) {
+  c.strokeStyle = "rgba(63,216,255,.16)"; c.lineWidth = Math.max(2, r * .09);
+  for (const [a0, a1] of [[-2.6, -0.55], [0.55, 2.6]]) { c.beginPath(); c.arc(cx, cy, r, a0, a1); c.stroke(); }
+  c.strokeStyle = "rgba(63,216,255,.28)"; c.lineWidth = 1; c.setLineDash([2, 4]);
+  c.beginPath(); c.moveTo(cx - r * 1.15, cy); c.lineTo(cx + r * 1.15, cy); c.moveTo(cx, cy - r * 1.15); c.lineTo(cx, cy + r * 1.15); c.stroke();
+  c.setLineDash([]);
+  c.beginPath(); c.arc(cx, cy, r * .42, 0, 7); c.stroke();
+}
+const pad4 = n => String(Math.max(0, Math.round(n))).padStart(4, "0");
+function progressCube(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const pid = cv.dataset.pid, layout = cv.dataset.layout;
+  let yaw = 0, last = performance.now();
+  loop(cv, () => {
+    const now = performance.now(), dt = now - last; last = now;
+    const p = FLEET.find(x => x.id === pid); if (!p) return;
+    const printing = p.state === "printing", paused = p.state === "paused", live = printing || paused;
+    // printing spins, idle drifts slowly, paused holds; stepped mode moves in 15-degree clicks
+    const rate = printing ? .0011 : paused ? 0 : .00035;
+    yaw += rate * dt;
+    const shownYaw = OPT.motion === "stepped" ? Math.floor(yaw / (Math.PI / 12)) * (Math.PI / 12) : yaw;
+    const mark = paused ? VI : AM;
+    const rows = layout === "single"
+      ? [{ tag: "PROGRESS", num: live ? p.percent : 0, frac: live ? p.percent / 100 : 0, sub: live ? `${p.percent}%` : "STANDBY" }]
+      : [{ tag: "PROGRESS", num: live ? p.percent : 0, frac: live ? p.percent / 100 : 0, sub: live ? `${p.percent}%` : "STBY" },
+         { tag: "LAYER", num: live ? p.layer : 0, frac: live ? p.layer / p.total_layers : 0, sub: live ? `/${p.total_layers}` : "STBY" },
+         { tag: "NOZZLE", num: p.nozzle, frac: p.nozzle_target ? Math.min(1, p.nozzle / p.nozzle_target) : 0,
+           sub: p.nozzle_target ? `°C / ${p.nozzle_target}` : "°C · COLD" }];
+    c.clearRect(0, 0, w, h);
+    const padX = w * .05, padY = h * .08, rowH = (h - padY * 2) / rows.length;
+    const fs = Math.max(9, Math.min(22, rowH * (rows.length === 1 ? .1 : .16)));
+    rows.forEach((r, i) => {
+      const y0 = padY + rowH * i, mh = rowH * (rows.length === 1 ? .34 : .42), my = y0 + rowH * .3;
+      const mw = w * (rows.length === 1 ? .44 : .46);
+      c.font = `${fs}px ui-monospace, Menlo, Consolas, monospace`; c.textBaseline = "alphabetic";
+      // 4-digit readout above the meter, like the reference's "0065"
+      c.fillStyle = (live || r.tag === "NOZZLE") ? CY : "#3a5a86"; c.fillText(pad4(r.num), padX, my - fs * .55);
+      c.fillStyle = "#5f7ea6"; c.font = `${fs * .62}px ui-monospace, Menlo, Consolas, monospace`;
+      c.fillText(r.tag, padX + fs * 3.4, my - fs * .55);
+      const rowLive = live || (r.tag === "NOZZLE" && r.frac > 0);
+      wedgeMeter(c, padX, my, mw, mh, r.frac, rowLive, mark);
+      // small bracket with an inward marker, between meter and reticle
+      const bx = padX + mw + w * .07, bcy = my + mh / 2;
+      glowLine(c, [[bx + 8, bcy - mh * .45], [bx, bcy - mh * .3], [bx, bcy + mh * .3], [bx + 8, bcy + mh * .45]], CY, 1.4);
+      c.fillStyle = mark; c.beginPath(); c.moveTo(bx + 6, bcy); c.lineTo(bx + 16, bcy - 6); c.lineTo(bx + 16, bcy + 6); c.closePath(); c.fill();
+      c.fillStyle = "#5f7ea6"; c.font = `${fs * .62}px ui-monospace, Menlo, Consolas, monospace`;
+      c.fillText(r.sub, bx - 2, bcy + mh * .45 + fs * .95);
+      // reticle + cube
+      const rcx = w * (rows.length === 1 ? .76 : .78), rr = Math.min(rowH * (rows.length === 1 ? .36 : .44), w * .14);
+      reticleRing(c, rcx, bcy, rr);
+      drawCube(c, rcx, bcy, rr * .46, shownYaw + i * 0.7, CY);
+      sideScale(c, w - padX * .9, y0 + rowH * .12, rowH * .76, live ? r.frac : null, mark);
+    });
+  });
+}
+
+const grid = document.getElementById("grid");
+function build() {
+  grid.innerHTML = "";
+  FLEET.forEach(p => {
+    const el = document.createElement("div"); el.className = "ppanel";
+    el.innerHTML = `<div class="crt">
+      <div class="phead"><span class="lamp ${p.state}"></span><span class="pname nameglow">${p.name}</span><span class="pmodel">${p.model}</span></div>
+      <div class="pbody"><canvas class="bganim" data-pid="${p.id}" data-layout="${OPT.layout === "single" ? "single" : "rows"}"></canvas>
+        <span class="facechip">PROGRESS · ${WORD[p.state]}</span></div></div>`;
+    grid.appendChild(el);
+  });
+  grid.querySelectorAll("canvas").forEach(progressCube);
+  document.getElementById("note").textContent = (OPT.layout === "single"
+    ? "A · SINGLE: one large wedge meter for the job's progress, one large cube."
+    : "B · THREE ROWS, like the reference: PROGRESS (percent), LAYER (layer of total), NOZZLE (temperature against its target; Elephant is still heating), each with its own cube.")
+    + " Printing panels spin the cube and mark the fill edge in amber; Lemur is PAUSED (violet markers, cube holds still); Bay 4 is IDLE (meters empty, STANDBY, slow ambient drift).";
+}
+document.querySelectorAll("#ctl [data-k]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(`#ctl [data-k="${b.dataset.k}"]`).forEach(x => x.classList.toggle("on", x === b));
+  OPT[b.dataset.k] = b.dataset.v; build();
+}));
+document.getElementById("hidebtn").onclick = e => {
+  const c = document.getElementById("ctl"); c.classList.toggle("min");
+  e.target.textContent = c.classList.contains("min") ? "MOCKUP CONTROLS ▴" : "HIDE ▾";
+};
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(build, 150); });
+setInterval(() => { document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8); }, 1000);
+// jobs advance so the meters visibly move
+setInterval(() => FLEET.forEach(p => { if (p.state !== "printing") return;
+  const k = +OPT.speed; p.layer = Math.min(p.total_layers, p.layer + 1 * k / 4);
+  p.percent = Math.min(100, Math.round(p.layer / p.total_layers * 100));
+  p.remaining_min = Math.max(0, +(p.remaining_min - 0.05 * k).toFixed(2));
+  if (p.nozzle < p.nozzle_target) p.nozzle = Math.min(p.nozzle_target, p.nozzle + 3);
+  if (p.layer >= p.total_layers) { p.layer = 1; p.percent = 1; p.remaining_min = 60; } }), 500);
+build();
+</script>
+</body>
+</html>

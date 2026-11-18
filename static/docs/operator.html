@@ -46,8 +46,9 @@
        away, so fleet state stays readable from across the room. <b>Tap any panel</b> to
        open its detail console.</p>
     <h3>THE LAYER STACK</h3>
-    <p>While a printer is printing or paused, its animation turns alternate between the
-       scanner animations and the <b>layer stack</b>, a picture of the job itself. Each block is
+    <p>While a printer is printing or paused, its animation turns cycle through the <b>layer
+       stack</b>, the <b>progress cube</b> (below), and the scanner animations. The layer stack is
+       a picture of the job itself. Each block is
        one layer. Finished layers stack bottom-up, left to right, as glowing cyan blocks; the
        layer being printed glows <b>amber</b> and pulses, then flashes white and settles into
        the stack when it completes. While the printer is paused, that block turns
@@ -56,6 +57,12 @@
        to come. The readout at the bottom left gives the layer and percentage. On very tall
        prints each block stands for several layers, and a <b>1 BLOCK = N LAYERS</b> note
        appears in the corner.</p>
+    <h3>THE PROGRESS CUBE</h3>
+    <p>A tapered wedge meter on the left fills with the job&rsquo;s progress, with the percentage
+       above it and a bright line and marker at the fill edge. On the right, a glowing wireframe
+       cube spins inside a reticle while the printer prints. When the printer is paused the cube
+       holds still and the markers turn <b>violet</b>. Idle printers show it too, as one of their
+       resting faces: the meter reads <b>STANDBY</b> and the cube drifts slowly.</p>
     <p>On a wide screen, such as a fullscreen lab display, panels are laid out <b>two
        across</b>, and two rows fill the screen. Each panel takes about a quarter of the
        display, and its text and meters scale up to match. A third printer sits

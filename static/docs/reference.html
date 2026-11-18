@@ -92,7 +92,9 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
        <code>.3mf</code>/<code>.gcode</code> files in the SD root (MLSD, with NLST fallback)
        and to upload new files ahead of a <code>project_file</code> command.</p>
     <p><b>SSDP discovery</b> — the console passively listens on UDP ports <b>2021</b> and
-       <b>1990</b> for the printers&rsquo; periodic announcements, matching on the serial in
+       <b>1990</b> for the printers&rsquo; periodic announcements, and joins the SSDP multicast
+       group <code>239.255.255.250</code> they are sent to (Linux delivers multicast only to a
+       host that has joined the group; broadcasts on 2021 arrive either way), matching on the serial in
        <code>USN</code> and reading the address from <code>Location</code>. When a
        printer&rsquo;s address changes, its MQTT client reconnects to the new one. If Bambu
        Studio runs on the same host and holds the port, discovery is skipped silently and

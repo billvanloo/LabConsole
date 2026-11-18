@@ -516,9 +516,106 @@ function layerStack(cv) {
     if (bt !== lastBucket && bucket) { bucket.textContent = bt; lastBucket = bt; }
   });
 }
+/* ---- progress cube: a tapered wedge meter for the job's progress beside a spinning,
+   glowing wireframe cube in isometric view (35.26 deg tilt, 45 deg rest yaw), in a reticle.
+   Modelled on the owner's Galaxy's Edge reference photo; approved as option A of
+   mockups/progress-cube-mockup.html. Printing spins the cube, paused holds it in the
+   isometric hexagon with violet markers, idle shows STANDBY and drifts slowly. Glow is
+   stacked strokes rather than shadowBlur, which is cheaper on a Pi 3. Reads `fleet` by
+   printer id every frame, like the layer stack, so pushes never tear it down. ---- */
+const CUBE_PITCH = Math.atan(1 / Math.SQRT2);
+const CUBE_YAW0 = Math.PI / 4;
+const CUBE_V = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+const CUBE_E = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+function glowLine(c, pts, col, w) {
+  for (const [lw, a] of [[w * 5, .10], [w * 2.4, .28], [w, 1]]) {   // halo, glow, core
+    c.globalAlpha = a; c.lineWidth = lw; c.strokeStyle = col; c.beginPath();
+    pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+}
+function drawCube(c, cx, cy, s, yaw, col) {
+  yaw += CUBE_YAW0;
+  const cp = Math.cos(CUBE_PITCH), sp = Math.sin(CUBE_PITCH), cyw = Math.cos(yaw), syw = Math.sin(yaw);
+  const P = CUBE_V.map(([x, y, z]) => {
+    const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw;     // yaw about the vertical axis
+    const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;        // fixed isometric tilt
+    return [cx + x1 * s, cy + y2 * s, z2];
+  });
+  CUBE_E.forEach(([a, b]) => {
+    if ((P[a][2] + P[b][2]) / 2 < -0.35) {                    // edges facing away: dim, no glow
+      c.globalAlpha = .28; c.lineWidth = 1; c.strokeStyle = col; c.beginPath();
+      c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke(); c.globalAlpha = 1;
+    } else glowLine(c, [P[a], P[b]], col, Math.max(1.1, s * 0.035));
+  });
+  const g = c.createRadialGradient(cx, cy, 0, cx, cy, s * 1.1);
+  g.addColorStop(0, "rgba(63,216,255,.22)"); g.addColorStop(1, "rgba(63,216,255,0)");
+  c.fillStyle = g; c.fillRect(cx - s * 1.2, cy - s * 1.2, s * 2.4, s * 2.4);
+}
+function wedgeMeter(c, x, y, w, h, frac, live, mark) {
+  const ticks = 10, base = y + h, tip = h * 0.22, topAt = t => base - (tip + (h - tip) * t);
+  c.strokeStyle = "rgba(63,216,255,.55)"; c.lineWidth = 1;
+  for (let i = 0; i <= ticks; i++) { const tx = x + w * i / ticks; c.beginPath(); c.moveTo(tx, y); c.lineTo(tx, base); c.stroke(); }
+  if (frac > 0) {
+    const fx = x + w * frac;
+    c.fillStyle = "rgba(108,200,255,.78)"; c.beginPath();
+    c.moveTo(x, base); c.lineTo(x, topAt(0)); c.lineTo(fx, topAt(frac)); c.lineTo(fx, base); c.closePath(); c.fill();
+  }
+  const cap = Math.max(6, w * .035);
+  glowLine(c, [[x + cap, y], [x, y], [x, base], [x + cap, base]], CY, 1.4);
+  glowLine(c, [[x + w + cap * 2, y], [x + w + cap * 3, y], [x + w + cap * 3, base], [x + w + cap * 2, base]], CY, 1.4);
+  if (live) {
+    const fx = x + w * Math.max(0, Math.min(1, frac)), tz = Math.max(6, h * .13);
+    glowLine(c, [[fx, y - h * .06], [fx, base + h * .06]], mark, 2.2);
+    c.fillStyle = CY; c.beginPath(); c.moveTo(fx, base + h * .16);
+    c.lineTo(fx - tz * .7, base + h * .16 + tz); c.lineTo(fx + tz * .7, base + h * .16 + tz); c.closePath(); c.fill();
+  }
+}
+function sideScale(c, x, y, h, frac, mark) {
+  c.strokeStyle = "rgba(63,216,255,.7)"; c.lineWidth = 1.2;
+  for (let i = 0; i <= 16; i++) { const ty = y + h * i / 16, len = i % 4 === 0 ? 9 : 5; c.beginPath(); c.moveTo(x, ty); c.lineTo(x + len, ty); c.stroke(); }
+  if (frac != null) { const ty = y + h * (1 - frac), tz = 7;
+    c.fillStyle = mark; c.beginPath(); c.moveTo(x - 3, ty); c.lineTo(x - 3 - tz * 1.4, ty - tz); c.lineTo(x - 3 - tz * 1.4, ty + tz); c.closePath(); c.fill(); }
+}
+function reticleRing(c, cx, cy, r) {
+  c.strokeStyle = "rgba(63,216,255,.16)"; c.lineWidth = Math.max(2, r * .09);
+  for (const [a0, a1] of [[-2.6, -0.55], [0.55, 2.6]]) { c.beginPath(); c.arc(cx, cy, r, a0, a1); c.stroke(); }
+  c.strokeStyle = "rgba(63,216,255,.28)"; c.lineWidth = 1; c.setLineDash([2, 4]);
+  c.beginPath(); c.moveTo(cx - r * 1.15, cy); c.lineTo(cx + r * 1.15, cy); c.moveTo(cx, cy - r * 1.15); c.lineTo(cx, cy + r * 1.15); c.stroke();
+  c.setLineDash([]); c.beginPath(); c.arc(cx, cy, r * .42, 0, 7); c.stroke();
+}
+function progressCube(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const pid = cv.dataset.pid; let yaw = 0, last = performance.now();
+  loop(cv, () => {
+    const now = performance.now(), dt = now - last; last = now;
+    const p = fleet.find(x => x.id === pid); if (!p) return;
+    const printing = p.state === "printing", paused = p.state === "paused", live = printing || paused;
+    yaw += (printing ? .0011 : paused ? 0 : .00035) * dt;
+    const mark = paused ? VI : AM, pct = live ? (p.percent ?? 0) : 0, frac = pct / 100;
+    c.clearRect(0, 0, w, h);
+    const padX = w * .05, rowH = h * .84, y0 = h * .08, fs = Math.max(9, Math.min(22, rowH * .1));
+    const mh = rowH * .34, my = y0 + rowH * .3, mw = w * .44, font = k => `${fs * k}px ui-monospace, Menlo, Consolas, monospace`;
+    // 4-digit readout above the meter, like the reference's "0065"
+    c.font = font(1); c.textBaseline = "alphabetic";
+    c.fillStyle = live ? CY : "#3a5a86"; c.fillText(String(Math.round(pct)).padStart(4, "0"), padX, my - fs * .55);
+    c.fillStyle = "#5f7ea6"; c.font = font(.62); c.fillText("PROGRESS", padX + fs * 3.4, my - fs * .55);
+    wedgeMeter(c, padX, my, mw, mh, frac, live, mark);
+    // small bracket with an inward marker between the meter and the reticle
+    const bx = padX + mw + w * .07, bcy = my + mh / 2;
+    glowLine(c, [[bx + 8, bcy - mh * .45], [bx, bcy - mh * .3], [bx, bcy + mh * .3], [bx + 8, bcy + mh * .45]], CY, 1.4);
+    c.fillStyle = mark; c.beginPath(); c.moveTo(bx + 6, bcy); c.lineTo(bx + 16, bcy - 6); c.lineTo(bx + 16, bcy + 6); c.closePath(); c.fill();
+    c.fillStyle = "#5f7ea6"; c.font = font(.62); c.fillText(live ? `${Math.round(pct)}%` : "STANDBY", bx - 2, bcy + mh * .45 + fs * .95);
+    const rcx = w * .76, rr = Math.min(rowH * .36, w * .14);
+    reticleRing(c, rcx, bcy, rr);
+    drawCube(c, rcx, bcy, rr * .46, yaw, CY);
+    sideScale(c, w - padX * .9, y0 + rowH * .12, rowH * .76, live ? frac : null, mark);
+  });
+}
 function mountAnims(root) {
   root.querySelectorAll("canvas[data-anim]").forEach(cv => {
-    ({ radar, orbit, scan, camdemo: camDemo, complete, stack: layerStack })[cv.dataset.anim]?.(cv);
+    ({ radar, orbit, scan, camdemo: camDemo, complete, stack: layerStack, cube: progressCube })[cv.dataset.anim]?.(cv);
   });
   root.querySelectorAll("canvas.wedge").forEach(cv =>
     wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
@@ -606,7 +703,11 @@ function faceStack(p) {
 }
 // A printer with a job that has layer data can show the layer stack on its animation turn.
 const hasLayers = p => (p.state === "printing" || p.state === "paused") && p.total_layers > 0;
-const animTurns = new Map();  // printer id -> {tick, n}: animation turns shown while it has layers
+const animTurns = new Map();  // printer id -> {tick, n}: animation turns this panel has shown
+function faceCube(p) {
+  return `<canvas class="bganim" data-anim="cube" data-pid="${esc(p.id)}"></canvas>
+    <span class="facechip">PROGRESS · CUBE</span>`;
+}
 function faceRest(kind) {
   return `<canvas class="bganim" data-anim="${kind}"></canvas><span class="facechip">SCANNER · RESTING</span>`;
 }
@@ -667,21 +768,25 @@ function panelFaceFor(p, idx) {
     // ticks), so it advances the instrument and a panel doesn't show the same one forever.
     // tick only moves on the 8s cycle, so the face stays put between renders and telemetry
     // pushes don't swap it mid-view.
-    const turn = idx + Math.floor(tick / 3);
+    // Count the animation turns this panel actually got. The camera rotation takes some of
+    // them, and at two printers it takes every other one, so any formula on `tick` would
+    // show one panel only some of the faces and the other the rest.
+    let r = animTurns.get(p.id);
+    if (!r || r.tick !== tick) { r = { tick, n: r ? r.n + 1 : idx }; animTurns.set(p.id, r); }
     if (hasLayers(p)) {
-      // Printing/paused panels alternate the layer stack with the ambient instruments: the
-      // stack is in addition to them, not instead (mockups/layer-stack-mockup.html). This
-      // counts the animation turns the panel actually got, because the camera rotation
-      // takes some of them, and at two printers it takes every other one, so any parity of
-      // `tick` would show one panel only the stack and the other only the instruments.
-      let r = animTurns.get(p.id);
-      if (!r || r.tick !== tick) { r = { tick, n: r ? r.n + 1 : idx }; animTurns.set(p.id, r); }
-      if (r.n % 2 === 0) return ["stack", faceStack(p)];
-      const kind = REST_KINDS[((r.n - 1) / 2) % REST_KINDS.length];
+      // Printing/paused panels cycle the layer stack, the progress cube, and one of the
+      // ambient instruments (mockups/layer-stack-mockup.html, progress-cube-mockup.html):
+      // the data faces are in addition to the instruments, not instead of them.
+      const k = r.n % 3;
+      if (k === 0) return ["stack", faceStack(p)];
+      if (k === 1) return ["cube", faceCube(p)];
+      const kind = REST_KINDS[((r.n - 2) / 3) % REST_KINDS.length];
       return ["rest-" + kind, faceRest(kind)];
     }
-    const kind = REST_KINDS[turn % REST_KINDS.length];
-    return ["rest-" + kind, faceRest(kind)];
+    // Idle panels: the three instruments plus the cube in STANDBY.
+    const k = r.n % (REST_KINDS.length + 1);
+    if (k === REST_KINDS.length) return ["cube", faceCube(p)];
+    return ["rest-" + REST_KINDS[k], faceRest(REST_KINDS[k])];
   }
   return ["status", faceStatus(p)];
 }
