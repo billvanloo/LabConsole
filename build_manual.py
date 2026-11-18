@@ -459,6 +459,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("05 \u00b7 TROUBLESHOOTING", S["h2"]), rule()]
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
+        ["Browser: invalid response or half-loaded pages over the network (localhost works)", "The OS sendfile shortcut cutting replies short, seen on macOS. The console turns it off at startup (AIOHTTP_NOSENDFILE=1); start an older copy with that variable set."],
         ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
         ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
