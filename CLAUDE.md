@@ -164,6 +164,10 @@ asyncio.run(main())"
   `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
   silently otherwise), and its stderr is logged as `[camera …]` lines — keep both. The TTL is the guard that
   keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
+- **`sendfile` is off**: `server.py` sets `AIOHTTP_NOSENDFILE=1` before importing aiohttp
+  (aiohttp reads it once, at import). On the owner's Mac, sendfile cut static-file replies
+  short over the LAN address while localhost worked, giving half-loaded pages and
+  ERR_INVALID_HTTP_RESPONSE. Keep the line above the import.
 - **Logging** goes through the stdlib `logging` module, configured in `setup_logging()` in
   `server.py`: stderr plus a rotating `lab-console.log` (1 MB x 4, sized for a Pi's SD card;
   `log_file` / `log_level` in config). A formatter masks every configured access code — log

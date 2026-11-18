@@ -8,11 +8,20 @@ import asyncio
 import json
 import logging
 import logging.handlers
+import os
 import pathlib
 import re
 import sys
 import threading
 import time
+
+# Serve static files with plain writes, not the OS sendfile() shortcut. On the owner's Mac,
+# sendfile cut replies short over the network address (localhost was fine): browsers got
+# half-loaded pages and ERR_INVALID_HTTP_RESPONSE, as the rest of a cut-off body landed at
+# the start of the next reply on the same keep-alive connection. AIOHTTP_NOSENDFILE=1
+# fixed it. aiohttp reads this once at import, so it must be set before the import below.
+# The files are small, so the cost is negligible even on a Pi 3.
+os.environ.setdefault("AIOHTTP_NOSENDFILE", "1")
 
 from aiohttp import web, WSMsgType
 
