@@ -400,6 +400,13 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                ".venv/bin/pip install -r requirements.txt\n"
                "cp config.example.json config.json   # fill in serials + access codes\n"
                ".venv/bin/python server.py           # open http://<pi>:8080"),
+          P("<b>Optional, a name instead of an IP address:</b> <font face='Courier'>sudo "
+            "scripts/set-hostname.sh</font> names the Pi <font face='Courier'>labconsole</font> (or "
+            "pass another name), makes sure the Avahi mDNS service is running and starts at boot, "
+            "checks the name resolves, and prints the address, e.g. http://labconsole.local:8080. "
+            "<font face='Courier'>--check</font> reports without changing anything. Works on the "
+            "same network as the Pi; Macs, iPhones and Windows 10/11 resolve .local names "
+            "themselves."),
           *callout("note", "\u25c8 WHY A VIRTUAL ENVIRONMENT",
                    "Current Raspberry Pi OS and Ubuntu 23.04+ refuse a plain pip3 install with "
                    "\u201cexternally-managed-environment\u201d. The .venv folder holds the console\u2019s "

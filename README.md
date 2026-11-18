@@ -19,6 +19,9 @@ cp config.example.json config.json        # fill in serials + access codes
 
 No printers handy? `.venv/bin/python server.py --demo` runs a full simulated fleet.
 
+Rather type a name than an IP? `sudo scripts/set-hostname.sh` names the Pi `labconsole`, so
+the console opens at `http://labconsole.local:8080` (same network only).
+
 ## Documentation
 
 Comprehensive documentation lives in the built-in **Technical Archive** -
