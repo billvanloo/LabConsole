@@ -471,7 +471,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
         ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
-        ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means a console copy older than the self-signed-certificate fix, run with a newer ffmpeg: update the console."],
+        ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means an older console copy run with a newer ffmpeg; \u2018Option tls_verify not found\u2019 an older copy run with an older ffmpeg (e.g. Raspberry Pi OS). The current console handles both: update it."],
         ["A1 camera ~1 fps", "Hardware rate of the chamber camera; not a fault."],
         ["Start print: file not found", "Switch sdcard_url_base to file:///mnt/sdcard/."],
         ["SD list empty", "Only SD root files are listed; uploads go to the root."],
@@ -514,7 +514,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "inspection in progress) are logged but do not change the panel state."),
           Paragraph("02 \u00b7 CAMERA PROTOCOLS", S["h2"]), rule()]
     e += ref_table(["MODELS", "TRANSPORT", "CONSOLE RELAY"], [
-        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace. Run with -tls_verify 0 (self-signed certificate); errors go to the log."],
+        ["X1 / X1C / X1E / H2D", "RTSPS :322 \u2014 rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1. Requires LAN Mode Liveview.", "ffmpeg \u2192 MJPEG at configurable fps/width; served as multipart/x-mixed-replace. Run with -tls_verify 0 (self-signed certificate) where ffmpeg supports it; older ffmpeg lacks the option and doesn\u2019t verify, so the relay retries without it. Errors go to the log."],
         ["A1 / A1 Mini / P1", "Proprietary chamber-image service, TLS :6000. 80-byte auth packet, then length-prefixed JPEG frames at ~1 fps.", "Frames pass straight through \u2014 no transcoding."],
     ], [1.2 * inch, 2.9 * inch, 2.3 * inch])
     e += [P("The relay hub enforces camera.max_streams (default 1); a new viewer evicts the "

@@ -165,7 +165,10 @@ asyncio.run(main())"
   measured time-to-first-frame on a chamber camera is ~3s, against an ~8s panel face
   window, so without it most of a camera turn rendered black. ffmpeg runs with
   `-tls_verify 0` (self-signed printer cert; newer ffmpeg verifies by default and fails
-  silently otherwise), and its stderr is logged as `[camera …]` lines — keep both. The TTL is the guard that
+  silently otherwise) — but older ffmpeg (the Pi's) has no such option on RTSPS inputs and
+  refuses to start, so `rtsp_frames()` retries without it on `Option tls_verify not found`
+  and remembers the answer in `_tls_verify_ok`. Its stderr is logged as `[camera …]` lines —
+  keep all of this. The TTL is the guard that
   keeps a stale image from sitting under the LIVE tag — keep it if you touch this.
 - **`sendfile` is off**: `server.py` sets `AIOHTTP_NOSENDFILE=1` before importing aiohttp
   (aiohttp reads it once, at import). On the owner's Mac, sendfile cut static-file replies
