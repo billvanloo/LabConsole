@@ -25,7 +25,7 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.5.0), then confirm all 32 files are present:
+Check `VERSION` at the repo root (should read 1.6.0), then confirm all 32 files are present:
 
 ```bash
 cat VERSION
@@ -69,7 +69,7 @@ Expected file manifest (32 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.5.0:
+Quick behavioral confirmations that you're on 1.6.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
@@ -77,6 +77,7 @@ grep -n 'add_get("/docs"' server.py        # docs route exists
 grep -n 'ARCHIVE' static/index.html        # archive link in status bar
 grep -n 'ERROR' static/app.js              # ERROR wording (not "FAULT")
 grep -n 'function layerStack' static/app.js # layer stack face (1.5)
+grep -n 'function progressCube' static/app.js # progress cube face (1.6)
 ```
 
 If any of these come back empty, re-obtain the current package before doing any work —
@@ -191,10 +192,11 @@ asyncio.run(main())"
   resting instrument on a **period of 3**, never 2, because `camHolder` advances with `tick` and a
   period-2 test lands every rest turn on the status turn at two printers; ERROR/OFFLINE panels
   hold status but still take their camera turn; `mockups/fleet-cycle-mockup.html` simulates it.
-  A printing/paused panel with layer data (`hasLayers()`) **alternates** its animation turns
-  between the layer stack and the instruments, counted per panel in `animTurns` — the count
-  must be of turns actually shown, because the camera rotation takes some, and at two
-  printers any parity of `tick` gives one panel only the stack and the other none),
+  Which animation a panel shows is chosen from `animTurns`, a per-panel count of the
+  animation turns it actually got: printing/paused panels with layer data (`hasLayers()`)
+  cycle stack → cube → instrument; idle panels cycle the three instruments plus the cube.
+  The count must be of turns actually shown, because the camera rotation takes some, and at
+  two printers any formula on `tick` gives one panel only some faces and the other the rest),
   the canvas-drawn vector instruments (radar/orbit/scan), the detail view, and the two modals
   (stop-confirm, start-print). Canvas animation loops self-terminate via `cv.isConnected`
   checks — when adding a new animated face, follow that pattern or it'll leak loops on
@@ -235,6 +237,11 @@ mockup round:
   steady when paused. It reads `fleet` by printer id every frame, so pushes never tear it
   down; finished blocks are cached offscreen. It assumes `layer_num` is the 1-based layer
   being printed (finished = `layer_num - 1`) — unconfirmed against real firmware. The
+  **progress cube** (`progressCube()`, `mockups/progress-cube-mockup.html`, option A) is the
+  other face in that rotation and an idle resting face: a tapered wedge meter of the job's
+  percent and a glowing isometric wireframe cube (spins printing, holds when paused, drifts
+  when idle with the meter at STANDBY); amber/violet markers, no orange; glow by stacked
+  strokes, not shadowBlur, for the Pi 3. The
   **progress reticle** is the other data-driven exception: on the two-across
   layout, printing/paused/ERROR status faces show `reticle()` (open arc, stepped segments) with
   the real percent, amber/violet/red by state; it's CSS-hidden elsewhere, where the small

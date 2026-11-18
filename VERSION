@@ -1,5 +1,5 @@
 Lab Console
-version: 1.5.0
+version: 1.6.0
 date: 2026-11-18
 tree: lab-console/
 
@@ -18,6 +18,8 @@ Feature set at this version:
   - Two-across fleet layout on wide screens, with a progress reticle on large panels (1.5)
   - Detail view fills the screen; prominent way back to the fleet (1.5)
   - Layer stack face, alternating with the ambient instruments while printing/paused (1.5)
+  - Printer names large and glowing in every panel header (1.6)
+  - Progress cube face: wedge meter + spinning isometric cube, in the rotation (1.6)
 
 If any of the above is missing from your working tree, you have an outdated
 copy. See the FILE MANIFEST section of CLAUDE.md to verify.
