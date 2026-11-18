@@ -25,7 +25,7 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.6.0), then confirm all 33 files are present:
+Check `VERSION` at the repo root (should read 1.7.0), then confirm all 33 files are present:
 
 ```bash
 cat VERSION
@@ -70,7 +70,7 @@ Expected file manifest (33 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.6.0:
+Quick behavioral confirmations that you're on 1.7.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
@@ -79,6 +79,7 @@ grep -n 'ARCHIVE' static/index.html        # archive link in status bar
 grep -n 'ERROR' static/app.js              # ERROR wording (not "FAULT")
 grep -n 'function layerStack' static/app.js # layer stack face (1.5)
 grep -n 'function progressCube' static/app.js # progress cube face (1.6)
+grep -n 'class Rediscovery' bambu/discovery.py   # rediscovery on lost connection (1.7)
 ```
 
 If any of these come back empty, re-obtain the current package before doing any work —
@@ -92,7 +93,7 @@ bambu/
   printer.py            BambuPrinter — one MQTT client per real printer, state + commands
   cameras.py             frame generators: chamber_frames() (A1/P1, :6000), rtsp_frames() (X1/H2D, :322, via ffmpeg)
   ftps.py                 implicit-TLS FTPS: list_printable(), upload()
-  discovery.py            passive SSDP listener, maps printer serial -> current IP
+  discovery.py            SSDP listener + Rediscovery watchdog (search, subnet scan)
   demo.py                 DemoPrinter — simulated fleet, mirrors BambuPrinter's public surface
 static/
   index.html / app.js / style.css     the console frontend (vanilla JS, no build step)
@@ -191,6 +192,21 @@ asyncio.run(main())"
   join the Pi heard nothing while the Mac worked (Bambu Studio there had joined the group).
   It matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
   printer. It's additive — `config.json` can also just hardcode an `ip` per printer.
+- **Rediscovery (1.7)** — passive listening alone never re-found a printer whose new lease
+  went unannounced: its client sat retrying the old address ("Keep alive timeout") and the
+  camera relay kept hitting it ("connection refused"). `discovery.Rediscovery` is a watchdog
+  thread that polls `p.online` / `p.offline_for()` every 5 s. Past
+  `discovery.rediscover_after_s` it runs an active M-SEARCH, then a scan of the /24 for
+  TCP 8883 that identifies hosts by TLS-cert CN, falling back to an MQTT login with the
+  missing printer's access code. A hit goes through the same `on_found` → `set_ip()` path
+  as an announcement, so `_run()` is still the only place a client is created. Passes back
+  off to 10 min while empty, and after `discovery.max_empty_scans` (default 3) scans in a row
+  miss a printer it drops out of the scan until it reconnects (SSDP search continues) —
+  powered-off lab printers otherwise meant a /24 sweep every 10 min all night. `/cam/<id>` returns 503 while a printer is offline.
+- **Testing discovery without printers:** `tests/fake_printer.py` in the 1.7 handoff is a
+  TLS server speaking enough MQTT 3.1.1 (CONNECT with password check, SUBSCRIBE, PING,
+  report PUBLISH). Bind fakes on 127.0.0.x, set `discovery.scan_subnets` to
+  `["127.0.0.0/29"]`, kill one and restart it on another 127.0.0.x to simulate DHCP.
 - **DemoPrinter mirrors BambuPrinter's public surface exactly** (`view()`, `pause()`,
   `resume()`, `stop()`, `set_light()`, `start_print()`, `.id`/`.ip`/`.camera_kind`) so
   `server.py` treats real and simulated printers identically. If you add a method to

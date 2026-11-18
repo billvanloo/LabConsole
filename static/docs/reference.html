@@ -97,8 +97,26 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
        host that has joined the group; broadcasts on 2021 arrive either way), matching on the serial in
        <code>USN</code> and reading the address from <code>Location</code>. When a
        printer&rsquo;s address changes, its MQTT client reconnects to the new one. If Bambu
-       Studio runs on the same host and holds the port, discovery is skipped silently and
-       configured IPs are used.</p>
+       Studio runs on the same host and holds the port, that listener is skipped with a log
+       warning; the rediscovery layers below still work.</p>
+    <p><b>Rediscovery</b> — a watchdog checks the fleet every 5 seconds. A printer offline
+       for <code>discovery.rediscover_after_s</code> (30 s) triggers a pass:</p>
+    <ol>
+      <li><b>Active SSDP search</b> — M-SEARCH probes
+          (<code>ST: urn:bambulab-com:device:3dprinter:1</code>) to 239.255.255.250:1990 and
+          broadcast on 2021/1990; replies are read for 3 seconds.</li>
+      <li><b>Subnet scan</b> — for printers still missing, TCP 8883 is probed across the
+          local /24 (or <code>discovery.scan_subnets</code>). Each open host is identified by
+          the serial in its TLS certificate&rsquo;s common name; failing that, by an MQTT
+          login with the missing printer&rsquo;s own access code. Access codes are
+          per-printer, so a successful login identifies it.</li>
+    </ol>
+    <p>A hit calls the same <code>set_ip()</code> path as an announcement. Passes are at
+       least <code>discovery.min_interval_s</code> apart and back off to 10 minutes while
+       they find nothing. After <code>discovery.max_empty_scans</code> (3) scans in a row
+       miss a printer, it is dropped from the subnet scan until it reconnects; SSDP search
+       continues. While a printer is offline, <code>/cam/&lt;id&gt;</code> returns
+       503 instead of starting a relay against a dead address.</p>
 
     <h2 id="s4"><span class="idx">04</span> WEBSOCKET SCHEMA</h2>
     <p>Browsers connect to <code>/ws</code>. The server pushes the full fleet snapshot

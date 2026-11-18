@@ -263,6 +263,9 @@ async def cam_handler(request):
     p = PRINTERS.get(request.match_info["id"])
     if not p or not p.ip or p.camera_kind == "none":
         raise web.HTTPNotFound(text="camera unavailable")
+    if not p.view().get("online"):
+        # Don't launch ffmpeg / the chamber relay at an address we know is dead.
+        raise web.HTTPServiceUnavailable(text="printer offline")
 
     resp = web.StreamResponse(headers={
         "Content-Type": f"multipart/x-mixed-replace; boundary={BOUNDARY}",
@@ -413,6 +416,14 @@ def main():
                 _bump()
 
         discovery.start(on_found)
+        dcfg = CFG.get("discovery", {})
+        discovery.Rediscovery(
+            PRINTERS, on_found,
+            rediscover_after_s=float(dcfg.get("rediscover_after_s", 30)),
+            subnet_scan=bool(dcfg.get("subnet_scan", True)),
+            scan_subnets=dcfg.get("scan_subnets") or None,
+            min_interval_s=float(dcfg.get("min_interval_s", 60)),
+            max_empty_scans=int(dcfg.get("max_empty_scans", 3)))
 
     @web.middleware
     async def revalidate_static(request, handler):
