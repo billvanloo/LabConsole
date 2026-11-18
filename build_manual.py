@@ -459,7 +459,6 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("05 \u00b7 TROUBLESHOOTING", S["h2"]), rule()]
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
-        ["Browser: invalid response or half-loaded pages", "Two programs are answering on the console\u2019s port, usually a second Lab Console still running (another terminal, or paused with Ctrl+Z). Find them with lsof -nP -iTCP:8080 -sTCP:LISTEN and stop the extra one. The console refuses to start when its port is already answering (\u2018port \u2026 is already in use\u2019 in the log)."],
         ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
         ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
