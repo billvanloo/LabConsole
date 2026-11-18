@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Console — Printer Name Mockup</title>
+<!-- APPROVED: option A (header) with the phosphor flicker, ported to static/style.css,
+     static/app.js and the docs figures. Mockup for review: the printer's display name, large and glowing, in the same place on
+     every face. CSS above the PROPOSED marker, the face templates (faceStatus, faceCam,
+     faceRest, faceStack) and the canvas instruments are copied from static/style.css and
+     static/app.js. Open fullscreen to judge it at lab-display size. -->
+<style>
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+.phead .pname{color:var(--cyan)}
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+/* Wide, tall screens (a fullscreen lab display): two panels across, and two rows fill
+   the screen, so a 3-4 printer fleet gets about a quarter of the display per panel. A 3rd
+   printer sits bottom-left, keeping the slot a 4th will fill; a 5th+ scrolls to a third
+   row. Type and meters scale with the panel through container units, so the readout
+   carries across the room. Narrow windows and phones keep the auto-fit grid above.
+   Approved in mockups/fleet-layout-mockup.html (option A). */
+@media (min-width:1000px) and (min-height:560px){
+  #fleet{container-type:size}
+  #fleet .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc((100cqh - 36px) / 2)}
+  #fleet .ppanel{display:flex}
+  #fleet .ppanel .crt{flex:1;min-height:0;container-type:inline-size}
+  #fleet .phead{font-size:clamp(11px,1.45cqw,16px);padding:1.3cqw 1.6cqw .9cqw;gap:1cqw}
+  #fleet .phead .lamp{width:clamp(9px,1.3cqw,15px);height:clamp(9px,1.3cqw,15px)}
+  #fleet .phead .pmodel{font-size:clamp(9px,1.1cqw,13px)}
+  #fleet .pbody{padding:1.2cqw 2.2cqw 1.8cqw;gap:clamp(7px,1.3cqw,16px)}
+  #fleet .statword{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .fname{font-size:clamp(11px,2.1cqw,22px)}
+  #fleet .kv,#fleet .errline{font-size:clamp(10px,1.8cqw,19px)}
+  #fleet .progrow{gap:1.6cqw}
+  #fleet .pbar{height:clamp(10px,1.7cqw,18px)}
+  #fleet .ppct{font-size:clamp(12px,2.8cqw,30px)}
+  /* the markup pins the wedge at 34px; wedge() sizes its drawing from the CSS box */
+  #fleet canvas.wedge{width:clamp(34px,6.5cqw,72px)!important;height:clamp(34px,6.5cqw,72px)!important}
+  #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
+  #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
+  #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackread{font-size:clamp(9px,1.3cqw,15px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackbucket{font-size:clamp(8px,1.1cqw,13px);right:1.6cqw;top:.6cqw}
+
+  /* status faces with progress get a large open-arc reticle beside the readout, filling the
+     band that otherwise sits empty at this size (option C of
+     mockups/large-panel-options-mockup.html). The reticle replaces the small wedge here. */
+  #fleet .pbody:has(>canvas.reticle){display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  #fleet .pbody:has(>canvas.reticle)>:is(.statword,.fname,.kv,.errline){grid-column:1}
+  #fleet .pbody>canvas.reticle{display:block;grid-column:2;grid-row:1 / 6;align-self:center;
+    width:min(40cqw,100%);aspect-ratio:1;height:auto}
+  #fleet .pbody:has(>canvas.reticle)>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  #fleet .pbody:has(>canvas.reticle) canvas.wedge{display:none}
+  /* idle faces have no progress to show: center their readout instead */
+  #fleet .pbody:has(>.statword.idle){justify-content:center}
+}
+/* outside the two-across layout the reticle stays hidden and the small wedge does the job */
+canvas.reticle{display:none}
+
+/* Detail view on a wide, tall screen: fill it. The camera takes the left column above
+   larger controls; the readings fill the right column and scale with it (container
+   units), headed by a progress block with the reticle. Narrow windows keep the layout
+   above, without the block. Approved as option B of mockups/detail-view-mockup.html
+   (issue #6). */
+.dprog{display:none}
+@media (min-width:1000px) and (min-height:560px){
+  #detail .dhead{padding:12px 14px}
+  #detail .dstate{font-size:16px;letter-spacing:.3em}
+  #detail .detailgrid{flex:1;min-height:0;grid-template-columns:1.35fr .65fr;grid-template-rows:minmax(0,1fr)}
+  #detail .dblock{display:flex;flex-direction:column;min-height:0}
+  #detail .dcrt.cam{flex:1;min-height:0}
+  #detail .dcrt.cam canvas,#detail .dcrt.cam img{height:100%!important;width:100%}
+  #detail .camtag{font-size:13px;left:14px;top:12px}
+  #detail .ctrls{gap:10px;padding:14px 4px 4px}
+  #detail .cbtn{font-size:15px;padding:20px 8px}
+  /* the right column stops short of the fixed corner FLEET button */
+  #detail .detailgrid>.dblock:last-child{margin-bottom:78px;container-type:inline-size}
+  #telem{flex:1;min-height:0;display:flex;flex-direction:column}
+  #telem .telem{flex:1;grid-auto-rows:1fr}
+  #telem .tcell{padding:1.6cqw 2.4cqw;display:flex;flex-direction:column;justify-content:center}
+  #telem .tcell .tl{font-size:clamp(9px,1.7cqw,14px);margin-bottom:.8cqw}
+  #telem .tcell .tv{font-size:clamp(17px,4.6cqw,42px)}
+  #telem .tcell .tv small{font-size:clamp(10px,2cqw,18px)}
+  #telem .tcell .tv.file{font-size:clamp(11px,2.6cqw,22px)}
+  #telem .tcell.inprog{display:none}
+  /* five readings left below the block: the last spans the row so no slot sits empty */
+  #telem .telem>.tcell:last-child{grid-column:1 / -1}
+  #telem .amslbl{font-size:clamp(9px,1.5cqw,13px);padding:1.6cqw 2.4cqw 0}
+  #telem .ams{padding:1.4cqw 2.4cqw 2cqw;gap:1.4cqw}
+  #telem .slot{font-size:clamp(9px,1.6cqw,14px);padding:1.2cqw 1.4cqw}
+  #telem .slot i{height:clamp(5px,1cqw,9px);margin-bottom:1cqw}
+  #telem .hmsbox{font-size:clamp(10px,2.4cqw,20px);padding:1.6cqw 2.4cqw}
+  #telem .dprog{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2.6cqw;align-items:center;
+    padding:2cqw 2.4cqw;border-bottom:1px solid #101c36;background:var(--panel-deep)}
+  #telem .dprog.noret{grid-template-columns:1fr}
+  #telem .dprog canvas.reticle{display:block;width:min(34cqw,260px);aspect-ratio:1;height:auto}
+  #telem .dprog .tl{font-size:clamp(9px,1.7cqw,14px);letter-spacing:.25em;color:var(--text-dim);margin:1.2cqw 0 .5cqw}
+  #telem .dprog .tl:first-child{margin-top:0}
+  #telem .dprog .file{font-size:clamp(11px,2.6cqw,22px);color:#bfe9ff;word-break:break-all;line-height:1.35}
+  #telem .dprog .big{font-size:clamp(20px,6cqw,56px);color:var(--amber)}
+  #telem .dprog .big.vi{color:var(--violet)} #telem .dprog .big.al{color:var(--alert)}
+  #telem .dprog .big.idle{color:var(--cyan)} #telem .dprog .big.offline{color:#3a4a66}
+  #telem .dprog .mid{font-size:clamp(14px,3.6cqw,32px);color:var(--cyan)}
+  #telem .dprog .mid small{font-size:.55em;color:var(--text-dim)}
+}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+/* layer stack overlays (mockups/layer-stack-mockup.html) */
+.stackread{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+  letter-spacing:.15em;z-index:2}
+.stackread b{color:var(--cyan);font-weight:400}
+.stackbucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+  color:var(--amber);z-index:2}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+.camtag.dim{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+/* ---------- detail view ---------- */
+#detail{flex:1;display:flex;flex-direction:column;overflow:auto}
+.dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
+  letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
+.dhead .lamp{width:9px;height:9px;border-radius:50%}
+/* the way back to the fleet is lit and sized to find at a glance, plus a corner button in
+   thumb reach on a touch screen; Esc also works (mockups/large-panel-options-mockup.html, D2) */
+.backbtn{font-family:inherit;font-size:13px;letter-spacing:.25em;padding:11px 20px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+.backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetfab:hover{background:rgba(14,26,52,.95)}
+.dstate{margin-left:auto;font-size:11px;color:var(--amber)}
+.detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
+@media (max-width:720px){.detailgrid{grid-template-columns:1fr}}
+.dblock{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:14px;padding:8px}
+.dcrt{position:relative;background:var(--panel-deep);border-radius:9px;
+  border:1px solid #0d1526;overflow:hidden}
+.dcrt.cam{min-height:250px;display:flex;align-items:center;justify-content:center}
+.dcrt.cam img{width:100%;height:250px;object-fit:contain;background:#04060c}
+.telem{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#101c36}
+.tcell{background:var(--panel-deep);padding:10px 12px}
+.tcell .tl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-bottom:5px}
+.tcell .tv{font-size:17px;color:var(--cyan)}
+.tcell .tv small{font-size:10px;color:var(--text-dim)}
+.tcell .tv.warm{color:var(--amber)}
+.tcell .tv.file{font-size:11px;line-height:1.5;word-break:break-all}
+.amslbl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);padding:10px 12px 0}
+.ams{display:flex;gap:8px;padding:10px 12px;background:var(--panel-deep)}
+.slot{flex:1;border:1px solid #1c2a4a;border-radius:4px;padding:7px 8px;
+  font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.slot i{display:block;height:5px;border-radius:2px;margin-bottom:6px;background:#2a3247}
+.hmsbox{padding:10px 12px;font-size:10px;color:#ffb49b;line-height:1.6;background:var(--panel-deep)}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.cbtn{font-family:inherit;font-size:11px;letter-spacing:.25em;padding:13px 6px;
+  border-radius:6px;cursor:pointer;background:rgba(63,216,255,.05);
+  border:1px solid var(--cyan-dim);color:var(--cyan)}
+.cbtn:disabled{opacity:.3;cursor:default}
+.cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
+.cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
+.cbtn.wide{grid-column:1/-1;border-style:dashed}
+
+/* ---------- modals ---------- */
+.dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;
+  align-items:center;justify-content:center;z-index:50}
+.modal{width:min(440px,92%);background:var(--bezel);border:1px solid #3a1c12;
+  border-radius:12px;padding:8px;box-shadow:0 0 30px rgba(255,90,42,.15)}
+.modal .inner{border:1px solid #2a1108;border-radius:8px;background:var(--panel-deep);padding:18px}
+.modal h3{font-size:13px;letter-spacing:.3em;color:var(--alert);margin-bottom:10px}
+.modal p{font-size:11px;color:#9fb4d2;line-height:1.6;margin-bottom:16px;word-break:break-word}
+.modal .row{display:flex;gap:8px}
+.modal.cyanline{border-color:#1c2a4a;box-shadow:0 0 30px rgba(63,216,255,.1)}
+.modal.cyanline .inner{border-color:#14203d}
+.modal.cyanline h3{color:var(--cyan)}
+.flist{list-style:none;margin-bottom:14px;border:1px solid #14203d;border-radius:4px;
+  max-height:180px;overflow:auto}
+.flist li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;
+  font-size:10.5px;border-bottom:1px solid #0e1830;color:#bfe9ff;cursor:pointer}
+.flist li span{color:var(--text-dim)}
+.flist li.sel{background:rgba(63,216,255,.08);outline:1px solid var(--cyan-dim)}
+.flist li.empty{color:var(--text-dim);cursor:default;justify-content:center}
+.upl{border:1px dashed #1c2a4a;border-radius:4px;text-align:center;color:var(--text-dim);
+  font-size:10px;letter-spacing:.2em;padding:12px;margin-bottom:14px;cursor:pointer}
+.upl.busy{color:var(--amber);border-color:#8c5a1e}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:var(--bezel);border:1px solid var(--cyan-dim);color:var(--cyan);
+  font-size:10px;letter-spacing:.2em;padding:9px 16px;border-radius:6px;z-index:60;
+  box-shadow:0 0 18px rgba(63,216,255,.15)}
+.toast.err{border-color:#8c2c12;color:var(--alert)}
+.hidden{display:none !important}
+
+
+/* ======================= PROPOSED: a glowing printer-name plate =======================
+   The display name from config.json ("name") at the state word's typeface and size, in the
+   same place on every face, with a stronger phosphor glow than anything else on the panel.
+   It stays cyan in every state: it is identity, not status, and red stays error-only. */
+.nameglow{color:#e6fbff;letter-spacing:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  text-shadow:0 0 1px #fff, 0 0 5px rgba(63,216,255,.95), 0 0 12px rgba(63,216,255,.75),
+              0 0 26px rgba(63,216,255,.45), 0 0 44px rgba(63,216,255,.22)}
+body.flicker .nameglow{animation:phosphor 7s steps(1) infinite}
+@keyframes phosphor{0%{opacity:1}61%{opacity:.84}62%{opacity:1}63%{opacity:.9}64%{opacity:1}}
+@media (prefers-reduced-motion: reduce){body.flicker .nameglow{animation:none}}
+
+/* A · HEADER: the name takes over the header line */
+body.np-a .phead .pname{font-size:15px}
+body.np-a .phead .lamp{width:12px;height:12px}
+body.np-a .phead{gap:10px}
+/* the model label keeps its line when a long name is cut short */
+body:not(.np-cur) .phead .pmodel{white-space:nowrap;flex:0 0 auto}
+/* B · FOOTER: a nameplate strip under every face; the header keeps lamp + model */
+.pfoot{display:none}
+body.np-b .phead .pname{display:none}
+body.np-b .pfoot{display:flex;align-items:center;flex:0 0 auto;padding:6px 10px 7px;
+  border-top:1px solid #14284a;background:linear-gradient(180deg,rgba(10,22,46,.6),rgba(6,13,30,.9))}
+body.np-b .pfoot .pname{font-size:15px}
+@media (min-width:1000px) and (min-height:560px){
+  body.np-a #fleet .phead .pname, body.np-b #fleet .pfoot .pname{font-size:clamp(15px,3.6cqw,40px)}
+  body.np-a #fleet .phead .lamp{width:clamp(12px,1.9cqw,22px);height:clamp(12px,1.9cqw,22px)}
+  body.np-a #fleet .phead{padding:1.4cqw 1.8cqw 1cqw;gap:1.4cqw}
+  body.np-b #fleet .pfoot{padding:1cqw 1.8cqw 1.1cqw}
+}
+/* the detail view's header name gets the same treatment in both options */
+body:not(.np-cur) .dhead .dname{font-size:22px}
+
+/* ================= mockup-only review controls (not part of the proposal) ================= */
+.mockctl{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:50;display:flex;flex-wrap:wrap;
+  gap:12px;align-items:center;justify-content:center;background:rgba(6,10,22,.95);border:1px solid #2a3a5c;
+  border-radius:8px;padding:7px 12px;font-size:9px;letter-spacing:.2em;color:var(--text-dim);
+  box-shadow:0 6px 24px rgba(0,0,0,.6);max-width:calc(100vw - 20px)}
+.mockctl .g{display:flex;align-items:center;gap:5px}
+.mockctl b{color:#8fa6c8;font-weight:400;margin-right:3px}
+.mockctl button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);font-family:inherit;
+  font-size:9px;letter-spacing:.15em;padding:4px 8px;border-radius:3px;cursor:pointer}
+.mockctl button.on{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(63,216,255,.08)}
+.mockctl.min>.g,.mockctl.min>.mocknote{display:none}
+.mocknote{flex-basis:100%;font-size:10px;line-height:1.6;letter-spacing:.04em;color:#90a9c8;max-width:1100px;text-align:center}
+
+</style>
+</head>
+<body class="np-a flicker">
+<div id="app">
+  <div class="statusbar">
+    <span class="title">LAB CONSOLE</span>
+    <span class="glyphs">⌌⍚⌏ ⍙⌇⍜ ⌈⍑⌋</span>
+    <span class="spacer"></span>
+    <span id="chips"></span>
+    <a class="archlink" href="#">⌘ ARCHIVE</a>
+    <span class="linkstate">LINK OK</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+  <div id="fleet"><div class="grid" id="grid"></div></div>
+  <div id="detail" style="display:none"></div>
+</div>
+
+<div class="mockctl" id="ctl">
+  <div class="mocknote" id="note"></div>
+  <span class="g"><b>NAME</b><button data-k="np" data-v="cur">CURRENT</button><button data-k="np" data-v="a" class="on">A · HEADER</button><button data-k="np" data-v="b">B · FOOTER</button></span>
+  <span class="g"><b>GLOW</b><button data-k="flicker" data-v="1" class="on">GLOW + FLICKER</button><button data-k="flicker" data-v="0">STEADY GLOW</button></span>
+  <span class="g"><b>FACES</b><button data-k="faces" data-v="mixed" class="on">ONE OF EACH</button><button data-k="faces" data-v="rotate">ROTATE 3s</button></span>
+  <span class="g"><b>LEMUR</b><button data-k="err" data-v="0" class="on">PRINTING</button><button data-k="err" data-v="1">ERROR</button></span>
+  <span class="g"><b>VIEW</b><button data-k="view" data-v="fleet" class="on">FLEET</button><button data-k="view" data-v="detail">DETAIL</button></span>
+  <button id="hidebtn">HIDE ▾</button>
+</div>
+
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
+const OK = "#57e0b8";   // --ok, the palette's success hue; alert red stays fault-only
+const REST_KINDS = ["orbit", "radar", "scan"];
+const STACK_MIN_PITCH = 7;   // px: below this, blocks get bucketed (N layers per block)
+const STACK_MAX_PITCH = 34;  // px: cap so short jobs don't render giant blocks
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+const fmtEta = m => m == null ? "—" :
+  (m >= 60 ? `${Math.floor(m / 60)}H ${m % 60}M` : `${m}M`);
+const stateWord = { idle: "IDLE", printing: "PRINTING", paused: "PAUSED", error: "ERROR", offline: "OFFLINE" };
+const hasLayers = p => (p.state === "printing" || p.state === "paused") && p.total_layers > 0;
+function complete() {}
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+function radar(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14; let a = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); c.lineWidth = 1;
+    c.strokeStyle = GR;
+    for (let i = 1; i <= 3; i++) { c.beginPath(); c.arc(cx, cy, R * i / 3, 0, 7); c.stroke(); }
+    c.strokeStyle = CY; c.globalAlpha = .9; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
+    c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
+    if (c.createConicGradient) {
+      // The sweep turns clockwise (a grows), and a conic gradient also runs clockwise from
+      // its start angle, so start it a twelfth of a turn BEHIND the line and brighten up to
+      // it: the glow trails the sweep instead of running ahead of it (issue #4).
+      const TRAIL = .12, g = c.createConicGradient(a - TRAIL * 2 * Math.PI, cx, cy);
+      g.addColorStop(0, "rgba(63,216,255,0)"); g.addColorStop(TRAIL, "rgba(63,216,255,.35)");
+      g.addColorStop(TRAIL + .001, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
+    }
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);
+    c.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); c.stroke();
+    [[.6, 1.2], [.35, 3.9], [.82, 5.1]].forEach(([rr, aa], i) => {
+      const bl = (Math.sin(Date.now() / 500 + i * 2) + 1) / 2;
+      c.fillStyle = i === 1 ? AL : AM; c.globalAlpha = .3 + bl * .7;
+      c.beginPath(); c.arc(cx + R * rr * Math.cos(aa), cy + R * rr * Math.sin(aa), 2.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+    });
+    a += 0.02;
+  });
+}
+function orbit(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); const cx = w * .38, cy = h * .55;
+    c.strokeStyle = GR; c.lineWidth = 1;
+    for (let i = 0; i < 4; i++) { c.beginPath(); c.ellipse(cx, cy, 26 + i * 22, (26 + i * 22) * .62, -.5, 0, 7); c.globalAlpha = .6; c.stroke(); }
+    c.globalAlpha = 1; c.strokeStyle = AM; c.beginPath(); c.moveTo(-10, h * .9); c.quadraticCurveTo(w * .5, h * .2, w + 10, h * .55); c.stroke();
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(-10, h * .15); c.lineTo(w + 10, h * .75); c.globalAlpha = .5; c.stroke(); c.globalAlpha = 1;
+    c.strokeStyle = AM; c.lineWidth = 1.4; c.beginPath(); c.arc(cx, cy, 15, 0, 7); c.stroke();
+    c.strokeStyle = AL; c.globalAlpha = .85; c.beginPath(); c.arc(cx, cy, 18, 0, 7); c.stroke(); c.globalAlpha = 1;
+    c.beginPath(); c.moveTo(cx - 9, cy + 3); c.bezierCurveTo(cx - 3, cy - 9, cx + 6, cy + 9, cx + 11, cy - 4); c.strokeStyle = AM; c.stroke();
+    const ox = cx + 70 * Math.cos(t), oy = cy + 70 * .62 * Math.sin(t);
+    c.fillStyle = CY; c.beginPath(); c.arc(ox, oy, 3, 0, 7); c.fill();
+    c.strokeStyle = CY; c.globalAlpha = .5; c.beginPath(); c.arc(ox, oy, 7, 0, 7); c.stroke(); c.globalAlpha = 1;
+    t += .012;
+  });
+}
+function scan(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const n = 16, bw = (w - 40) / n; let t = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = GR; c.beginPath(); c.moveTo(18, h - 22); c.lineTo(w - 18, h - 22); c.stroke();
+    for (let i = 0; i < n; i++) {
+      const v = (Math.sin(t + i * .7) + 1) / 2 * (h - 56) + 8;
+      c.fillStyle = i % 5 === 4 ? AM : CY; c.globalAlpha = .85;
+      c.fillRect(20 + i * bw, h - 24 - v, bw * .55, v); c.globalAlpha = 1;
+    }
+    c.strokeStyle = AM; c.beginPath();
+    for (let x = 0; x <= w - 36; x += 4) { const y = h - 70 - Math.sin(t * 2 + x * .05) * 10; x ? c.lineTo(18 + x, y) : c.moveTo(18, y); }
+    c.stroke(); t += .03;
+  });
+}
+function wedge(cv, pct, col) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 3;
+  c.strokeStyle = GR; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+  c.fillStyle = col; c.globalAlpha = .28; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.fill();
+  c.globalAlpha = 1; c.strokeStyle = col; c.beginPath(); c.moveTo(cx, cy);
+  c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + pct * 2 * Math.PI / 100); c.closePath(); c.stroke();
+}
+function reticle(cv, pct, col, label) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 4;
+  const N = 30, a0 = Math.PI * 0.75, span = Math.PI * 1.5, lit = Math.round(pct / 100 * N);
+  for (let i = 0; i < N; i++) {
+    const s = a0 + span * i / N + 0.012, e = a0 + span * (i + 1) / N - 0.012;
+    const ro = R, ri = R * (i % 5 === 4 ? 0.74 : 0.80);
+    c.beginPath(); c.arc(cx, cy, ro, s, e); c.arc(cx, cy, ri, e, s, true); c.closePath();
+    c.fillStyle = i < lit ? col : GR; c.globalAlpha = i < lit ? 0.9 : 0.55; c.fill();
+  }
+  c.globalAlpha = 1; c.strokeStyle = GR; c.lineWidth = 1;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span); c.stroke();
+  c.strokeStyle = col; c.globalAlpha = .5;
+  c.beginPath(); c.arc(cx, cy, R * 0.66, a0, a0 + span * pct / 100); c.stroke(); c.globalAlpha = 1;
+  c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `${Math.round(R * 0.42)}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(pct + "%", cx, cy - R * 0.04);
+  c.fillStyle = "#5f7ea6"; c.font = `${Math.max(8, Math.round(R * 0.09))}px ui-monospace, Menlo, Consolas, monospace`;
+  c.fillText(label, cx, cy + R * 0.32);
+}
+function camDemo(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return; let t = 0;
+  loop(cv, () => {
+    c.fillStyle = "#050910"; c.fillRect(0, 0, w, h);
+    c.strokeStyle = "rgba(63,216,255,.75)"; c.lineWidth = 1;
+    c.strokeRect(w * .2, h * .18, w * .6, h * .66);
+    c.beginPath(); c.moveTo(w * .2, h * .18); c.lineTo(w * .28, h * .08);
+    c.lineTo(w * .72, h * .08); c.lineTo(w * .8, h * .18); c.stroke();
+    const gy = h * .62 + Math.sin(t) * 4;
+    c.strokeStyle = AM; c.beginPath(); c.moveTo(w * .24, gy); c.lineTo(w * .76, gy); c.stroke();
+    c.fillStyle = AM; c.fillRect(w * .24 + ((Math.sin(t * 3) + 1) / 2) * (w * .5), gy - 7, 10, 7);
+    c.strokeStyle = "rgba(63,216,255,.4)"; c.strokeRect(w * .33, h * .66, w * .34, h * .12);
+    c.fillStyle = "rgba(255,255,255,.05)";
+    for (let i = 0; i < 90; i++) c.fillRect(Math.random() * w, Math.random() * h, 1.4, 1.4);
+    t += .03;
+  });
+}
+function stackLayout(w, h, total) {
+  const m = { l: 14, r: 14, t: 14, b: 26 }, pad = 7;
+  const aw = w - m.l - m.r - 2 * pad, ah = h - m.t - m.b - 2 * pad;
+  if (aw < 20 || ah < 20 || !(total > 0)) return null;
+  let per = 1, fitL = null;
+  for (;;) {
+    const n = Math.ceil(total / per);
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols), s = Math.min(aw / cols, ah / rows);
+      if (!best || s > best.s) best = { cols, rows, s, n };
+    }
+    if (best.s >= STACK_MIN_PITCH || per >= 64) { fitL = { ...best, per }; break; }
+    per++;
+  }
+  const s = Math.min(fitL.s, STACK_MAX_PITCH), gw = fitL.cols * s, gh = fitL.rows * s;
+  const gx = m.l + pad + (aw - gw) / 2, gy = m.t + pad + (ah - gh) / 2;
+  return { ...fitL, s, q: s * 0.72, gx, gy, gw, gh,
+           border: { x: gx - pad, y: gy - pad, w: gw + 2 * pad, h: gh + 2 * pad } };
+}
+function stackBlock(L, i) {
+  const row = Math.floor(i / L.cols), col = i % L.cols, off = (L.s - L.q) / 2;
+  return { x: L.gx + col * L.s + off, y: L.gy + L.gh - (row + 1) * L.s + off, q: L.q };
+}
+function rrect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+}
+function layerStack(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const pid = cv.dataset.pid, root = cv.parentElement;
+  const readout = root.querySelector(".stackread"), bucket = root.querySelector(".stackbucket");
+  const d = devicePixelRatio || 1;
+  const cache = document.createElement("canvas");
+  cache.width = cv.width; cache.height = cv.height;
+  const cc = cache.getContext("2d"); cc.setTransform(d, 0, 0, d, 0, 0);
+  let L = null, total = 0, doneDrawn = -1, lastCur = -1, flash = { i: -1, t: 0 };
+  let layer = 0, state = "printing", pct = null, lastText = "", lastBucket = null;
+
+  function drawDone(ctx, i) {
+    const b = stackBlock(L, i), r = Math.max(1, b.q * 0.14);
+    ctx.save();
+    ctx.shadowColor = "rgba(63,216,255,.85)"; ctx.shadowBlur = Math.max(3, b.q * 0.6);
+    rrect(ctx, b.x, b.y, b.q, b.q, r);
+    ctx.fillStyle = "rgba(63,216,255,.22)"; ctx.fill();
+    ctx.lineWidth = Math.max(1, b.q * 0.12); ctx.strokeStyle = CY; ctx.stroke();
+    ctx.restore();
+  }
+  function rebuild(doneBlocks) {
+    cc.clearRect(0, 0, w, h);
+    cc.strokeStyle = "rgba(63,216,255,.11)"; cc.lineWidth = 1;   // ghost slots for layers still to come
+    for (let i = doneBlocks; i < L.n; i++) {
+      const b = stackBlock(L, i);
+      rrect(cc, b.x + .5, b.y + .5, b.q - 1, b.q - 1, Math.max(1, b.q * 0.14)); cc.stroke();
+    }
+    for (let i = 0; i < doneBlocks; i++) drawDone(cc, i);
+    doneDrawn = doneBlocks;
+  }
+
+  loop(cv, () => {
+    const now = performance.now();
+    const p = fleet.find(x => x.id === pid);
+    // Hold the last known values if the printer leaves printing/paused before the next face change.
+    if (p && (p.state === "printing" || p.state === "paused") && p.total_layers > 0) {
+      layer = p.layer || 0; state = p.state; pct = p.percent;
+      if (p.total_layers !== total) { total = p.total_layers; L = stackLayout(w, h, total); doneDrawn = -1; lastCur = -1; }
+    }
+    if (!L) return;
+    const live = p && (p.state === "printing" || p.state === "paused");
+    const doneLayers = Math.max(0, Math.min(layer - 1, total));
+    const doneBlocks = Math.floor(doneLayers / L.per);
+    const cur = Math.min(doneBlocks, L.n - 1);
+
+    if (doneBlocks !== doneDrawn) {
+      if (doneDrawn >= 0 && doneBlocks === doneDrawn + 1) { drawDone(cc, doneDrawn); doneDrawn = doneBlocks; }
+      else rebuild(doneBlocks);
+    }
+    if (lastCur >= 0 && cur === lastCur + 1) flash = { i: lastCur, t: now };
+    lastCur = cur;
+
+    c.clearRect(0, 0, w, h);
+    c.drawImage(cache, 0, 0, w, h);
+
+    // dashed job envelope; dashes march while printing
+    const B = L.border, printing = live && state === "printing";
+    c.save();
+    rrect(c, B.x, B.y, B.w, B.h, Math.min(12, L.s * 0.9 + 4));
+    c.setLineDash([7, 5]);
+    c.lineDashOffset = printing ? -(now / 90) % 12 : 0;
+    c.lineWidth = 1.3; c.strokeStyle = "rgba(63,216,255,.7)";
+    c.shadowColor = "rgba(63,216,255,.6)"; c.shadowBlur = 6;
+    c.stroke();
+    c.restore();
+
+    // current layer: halo + pulsing fill + dashed outline. Amber = printing, violet = paused.
+    if (live) {
+      const b = stackBlock(L, cur), col = state === "paused" ? VI : AM;
+      const pulse = state === "paused" ? 0.55 : 0.55 + 0.45 * Math.sin(now / 280);
+      const cx = b.x + b.q / 2, cy = b.y + b.q / 2;
+      c.save();
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, b.q * 1.9);
+      g.addColorStop(0, hexA(col, 0.30 * pulse)); g.addColorStop(1, hexA(col, 0));
+      c.fillStyle = g; c.fillRect(cx - b.q * 2, cy - b.q * 2, b.q * 4, b.q * 4);
+      c.shadowColor = col; c.shadowBlur = 4 + b.q * 1.2 * pulse;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = hexA(col, 0.22 + 0.4 * pulse); c.fill();
+      c.lineWidth = Math.max(1.2, b.q * 0.14); c.strokeStyle = col;
+      if (b.q >= 9) c.setLineDash([Math.max(2, b.q * 0.24), Math.max(1.5, b.q * 0.13)]);
+      c.stroke();
+      c.restore();
+    }
+
+    // completion flash: white, fading into the settled cyan block over 450 ms
+    const dt = now - flash.t;
+    if (flash.i >= 0 && dt < 450) {
+      const b = stackBlock(L, flash.i), a = 1 - dt / 450;
+      c.save();
+      c.shadowColor = "#ffffff"; c.shadowBlur = 6 + b.q * a;
+      rrect(c, b.x, b.y, b.q, b.q, Math.max(1, b.q * 0.14));
+      c.fillStyle = `rgba(255,255,255,${0.75 * a})`; c.fill();
+      c.restore();
+    }
+
+    // overlays: touch the DOM only when the text changes
+    const shownPct = pct != null ? pct : Math.floor(doneLayers / total * 100);
+    const text = `LAYER <b>${layer}</b> / ${total} · ${shownPct}%`;
+    if (text !== lastText && readout) { readout.innerHTML = text; lastText = text; }
+    const bt = L.per > 1 ? `1 BLOCK = ${L.per} LAYERS` : "";
+    if (bt !== lastBucket && bucket) { bucket.textContent = bt; lastBucket = bt; }
+  });
+}
+function hmsCode(h) {
+  const a = (h.attr >>> 0).toString(16).padStart(8, "0"), c = (h.code >>> 0).toString(16).padStart(8, "0");
+  return `HMS ${a.slice(0, 4).toUpperCase()}-${a.slice(4).toUpperCase()}-${c.slice(0, 4).toUpperCase()}-${c.slice(4).toUpperCase()}`;
+}
+function faceStatus(p) {
+  const s = p.state;
+  if (s === "printing" || s === "paused") {
+    const pct = p.percent ?? 0;
+    return `
+      <div class="statword ${s}">${stateWord[s]}</div>
+      <div class="fname">${esc(p.file) || "—"}</div>
+      <div class="kv"><span>LAYER</span><b>${p.layer ?? "—"} / ${p.total_layers ?? "—"}</b></div>
+      <div class="kv"><span>NOZZLE / BED</span><b class="warm">${p.nozzle ?? "—"}° / ${p.bed ?? "—"}°</b></div>
+      <div class="kv"><span>TIME LEFT</span><b class="warm">${fmtEta(p.remaining_min)}</b></div>
+      <div class="progrow">
+        <canvas class="wedge" data-pct="${pct}" width="34" height="34" style="width:34px;height:34px"></canvas>
+        <div class="pbar"><i style="width:${pct}%"></i></div><span class="ppct">${pct}%</span>
+      </div>
+      <canvas class="reticle" data-pct="${pct}" ${s === "paused" ? 'data-col="vi" data-label="PAUSED"' : 'data-label="COMPLETE"'}></canvas>
+      <span class="facechip">STATUS</span>`;
+  }
+  if (s === "error") {
+    const pct = p.percent ?? 0;
+    const lines = p.hms.length ? p.hms.map(h => hmsCode(h)).join("<br>")
+      : `PRINT ERROR 0x${(p.print_error >>> 0).toString(16).toUpperCase()}`;
+    return `
+      <div class="statword error">ERROR</div>
+      <div class="errline">${lines}<br>CHECK PRINTER, CLEAR FAULT, THEN RESUME.</div>
+      <div class="kv"><span>JOB HELD AT</span><b>${pct}%</b></div>
+      <div class="progrow">
+        <canvas class="wedge" data-pct="${pct}" data-col="al" width="34" height="34" style="width:34px;height:34px"></canvas>
+        <div class="pbar errbar"><i style="width:${pct}%"></i></div>
+        <span class="ppct" style="color:var(--alert)">${pct}%</span>
+      </div>
+      <canvas class="reticle" data-pct="${pct}" data-col="al" data-label="HELD"></canvas>
+      <span class="facechip">STATUS</span>`;
+  }
+  if (s === "offline") {
+    return `
+      <div class="statword offline">OFFLINE</div>
+      <div class="kv"><span>LINK</span><b>NO MQTT CONNECTION</b></div>
+      <div class="kv"><span>HINT</span><b>CHECK POWER / LAN / DEV MODE</b></div>
+      <span class="facechip">STATUS</span>`;
+  }
+  return `
+    <div class="statword idle">IDLE</div>
+    <div class="kv"><span>NOZZLE / BED</span><b>${p.nozzle ?? "—"}° / ${p.bed ?? "—"}°</b></div>
+    <div class="kv"><span>LAST JOB</span><b>${esc(p.file) || "—"}</b></div>
+    <div class="kv"><span>READY</span><b class="warm">AWAITING ASSIGNMENT</b></div>
+    <span class="facechip">STATUS</span>`;
+}
+function faceStack(p) {
+  return `<canvas class="bganim" data-anim="stack" data-pid="${esc(p.id)}"></canvas>
+    <span class="stackread"></span><span class="stackbucket"></span>
+    <span class="facechip">LAYER STACK</span>`;
+}
+function faceRest(kind) {
+  return `<canvas class="bganim" data-anim="${kind}"></canvas><span class="facechip">SCANNER · RESTING</span>`;
+}
+function faceCam(p) {
+  if (p.camera === "none" || p.state === "offline")
+    return `<canvas class="bganim" data-anim="scan"></canvas>
+      <span class="camtag dim">NO SIGNAL</span>
+      <span class="camfoot">LIVEVIEW UNAVAILABLE</span>`;
+  if (p.camera === "demo")
+    return `<canvas class="bganim" data-anim="camdemo"></canvas>
+      <span class="camtag rec">LIVE · DEMO</span>
+      <span class="camfoot">SIMULATED FEED</span>`;
+  const foot = p.camera === "chamber" ? "CHAMBER IMAGE · ~1 FPS" : "RTSPS :322 RELAY";
+  return `<img class="camimg" src="/cam/${p.id}?t=${Date.now()}" alt="">
+    <span class="camtag rec">LIVE</span><span class="camfoot">${foot}</span>`;
+}
+
+/* ---- simulated fleet: names as they'd come from config.json ---- */
+const BASE = [
+  { id: "panda", name: "Panda X1C", model: "X1C", state: "printing", camera: "demo", file: "phone_case_v4.3mf",
+    layer: 61, total_layers: 112, percent: 54, remaining_min: 38, nozzle: 220, bed: 55, hms: [], print_error: 0 },
+  { id: "lemur", name: "Lemur X1C", model: "X1C", state: "printing", camera: "demo", file: "cable_clip_x12.3mf",
+    layer: 11, total_layers: 286, percent: 17, remaining_min: 108, nozzle: 220, bed: 55, hms: [], print_error: 0 },
+  { id: "elephant", name: "Elephant H2D", model: "H2D", state: "printing", camera: "demo", file: "Part Studio 1 (3)",
+    layer: 40, total_layers: 102, percent: 39, remaining_min: 140, nozzle: 220, bed: 55, hms: [], print_error: 0 },
+  { id: "bay4", name: "Bay 4 A1 Mini (Spare Unit)", model: "A1 MINI", state: "idle", camera: "demo", file: "keychain.3mf",
+    nozzle: 27, bed: 26, hms: [], print_error: 0 },
+];
+let fleet = BASE.map(p => ({ ...p }));
+const opt = { np: "a", flicker: "1", faces: "mixed", err: "0", view: "fleet" };
+let tick = 0;
+const KINDS = ["status", "cam", "stack", "rest"];
+
+function faceFor(p, i) {
+  const k = opt.faces === "mixed" ? KINDS[i] : KINDS[(i + tick) % KINDS.length];
+  if (p.state === "error") return k === "cam" ? "cam" : "status";
+  if (k === "stack" && !hasLayers(p)) return "rest";
+  return k;
+}
+function faceHTML(k, p) {
+  return k === "cam" ? faceCam(p) : k === "stack" ? faceStack(p) : k === "rest" ? faceRest("radar") : faceStatus(p);
+}
+function mount(root) {
+  root.querySelectorAll("canvas[data-anim]").forEach(cv =>
+    ({ radar, orbit, scan, camdemo: camDemo, stack: layerStack })[cv.dataset.anim]?.(cv));
+  root.querySelectorAll("canvas.wedge").forEach(cv => wedge(cv, +cv.dataset.pct || 0, cv.dataset.col === "al" ? AL : AM));
+  root.querySelectorAll("canvas.reticle").forEach(cv =>
+    reticle(cv, +cv.dataset.pct || 0, { al: AL, vi: VI }[cv.dataset.col] || AM, cv.dataset.label));
+}
+const grid = document.getElementById("grid");
+function build() {
+  fleet = BASE.map(p => (p.id === "lemur" && opt.err === "1")
+    ? { ...p, state: "error", hms: [{ attr: 0x03000200, code: 0x00010001 }] } : { ...p });
+  grid.innerHTML = "";
+  fleet.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "ppanel" + (p.state === "error" ? " error" : "");
+    el.innerHTML = `<div class="crt">
+      <div class="phead"><span class="lamp ${p.state}"></span><span class="pname${opt.np === "cur" ? "" : " nameglow"}">${esc(p.name)}</span><span class="pmodel">${esc(p.model)}</span></div>
+      <div class="pbody"></div>
+      <div class="pfoot"><span class="pname nameglow">${esc(p.name)}</span></div></div>`;
+    el.onclick = () => setOpt("view", "detail");
+    grid.appendChild(el);
+  });
+  chips(); render(true);
+}
+function render(force) {
+  fleet.forEach((p, i) => {
+    const body = grid.children[i].querySelector(".pbody"), k = faceFor(p, i);
+    if (!force && body.dataset.face === k) return;
+    body.dataset.face = k; body.innerHTML = faceHTML(k, p); mount(body);
+  });
+}
+function chips() {
+  const c = s => fleet.filter(p => p.state === s).length;
+  document.getElementById("chips").innerHTML =
+    `<span class="fleetchip"><span class="dot idle"></span>${c("idle")} IDLE</span>
+     <span class="fleetchip"><span class="dot print"></span>${c("printing")} PRINTING</span>
+     <span class="fleetchip"><span class="dot err"></span>${c("error")} ERROR</span>
+     <span class="fleetchip"><span class="dot off"></span>0 OFFLINE</span>`;
+}
+function renderDetail() {
+  const p = fleet[0], d = document.getElementById("detail");
+  d.innerHTML = `
+    <div class="dhead">
+      <button class="backbtn" id="back">◂ FLEET OVERVIEW</button>
+      <span class="lamp ${p.state}"></span>
+      <span class="dname${opt.np === "cur" ? "" : " nameglow"}" style="color:var(--cyan)">${esc(p.name)}</span>
+      <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${esc(p.model)}</span>
+      <span class="dstate">PRINTING · ${p.percent}%</span>
+    </div>
+    <div class="detailgrid">
+      <div class="dblock"><div class="dcrt cam"><canvas class="bganim" data-anim="camdemo" style="width:100%;height:250px"></canvas>
+        <span class="camtag rec">LIVE · RTSPS</span></div>
+        <div class="ctrls"><button class="cbtn warn">⏸ PAUSE</button><button class="cbtn stop">■ STOP</button>
+          <button class="cbtn">☼ LIGHT</button><button class="cbtn wide" disabled>▲ START PRINT…</button></div></div>
+      <div class="dblock"><div class="dcrt" id="telem">
+        <div class="dprog"><canvas class="reticle" data-pct="${p.percent}" data-label="COMPLETE"></canvas>
+          <div><div class="tl">FILE</div><div class="file">${esc(p.file)}</div>
+            <div class="tl">TIME LEFT</div><div class="big">${fmtEta(p.remaining_min)}</div>
+            <div class="tl">LAYER</div><div class="mid">${p.layer}<small> / ${p.total_layers}</small></div></div></div>
+        <div class="telem">
+          <div class="tcell inprog"><div class="tl">FILE</div><div class="tv file">${esc(p.file)}</div></div>
+          <div class="tcell inprog"><div class="tl">TIME LEFT</div><div class="tv warm">${fmtEta(p.remaining_min)}</div></div>
+          <div class="tcell inprog"><div class="tl">LAYER</div><div class="tv">${p.layer}<small> / ${p.total_layers}</small></div></div>
+          <div class="tcell"><div class="tl">SPEED</div><div class="tv">STANDARD</div></div>
+          <div class="tcell"><div class="tl">NOZZLE</div><div class="tv warm">220°<small> / 220°</small></div></div>
+          <div class="tcell"><div class="tl">BED</div><div class="tv warm">55°<small> / 55°</small></div></div>
+          <div class="tcell"><div class="tl">CHAMBER</div><div class="tv">31°</div></div>
+          <div class="tcell"><div class="tl">PART FAN</div><div class="tv">100<small>%</small></div></div>
+        </div></div></div>
+    </div>
+    <button class="fleetfab" id="fab">▦ FLEET</button>`;
+  d.querySelector("#back").onclick = d.querySelector("#fab").onclick = () => setOpt("view", "fleet");
+  mount(d);
+}
+const NOTES = {
+  cur: "CURRENT: the name is the small 11px label in each panel's header, the same weight as everything else.",
+  a: "A · HEADER: the name takes over the header line at the state word's size, with a stronger phosphor glow than anything else on the panel. It sits above every face (status, camera, layer stack, animation) in the same spot, so it never moves as the faces cycle.",
+  b: "B · FOOTER: the name sits on a nameplate strip along the bottom of every panel, same size and glow; the header keeps only the lamp and model. Reads like a label on the front of a machine.",
+};
+function note() {
+  document.getElementById("note").textContent = NOTES[opt.np] +
+    (opt.np === "cur" ? "" : " The name stays cyan in every state, so a red bezel still means only ERROR. Long names end in '…' (Bay 4).");
+}
+function setOpt(k, v) {
+  opt[k] = v;
+  document.querySelectorAll(`#ctl [data-k="${k}"]`).forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  document.body.className = `np-${opt.np}${opt.flicker === "1" ? " flicker" : ""}`;
+  const det = opt.view === "detail";
+  document.getElementById("fleet").style.display = det ? "none" : "";
+  document.getElementById("detail").style.display = det ? "flex" : "none";
+  if (det) renderDetail(); else build();
+  note();
+}
+document.querySelectorAll("#ctl [data-k]").forEach(b => b.addEventListener("click", () => setOpt(b.dataset.k, b.dataset.v)));
+document.getElementById("hidebtn").onclick = e => {
+  const c = document.getElementById("ctl"); c.classList.toggle("min");
+  e.target.textContent = c.classList.contains("min") ? "MOCKUP CONTROLS ▴" : "HIDE ▾";
+};
+addEventListener("keydown", e => { if (e.key === "Escape" && opt.view === "detail") setOpt("view", "fleet"); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => setOpt("view", opt.view), 150); });
+setInterval(() => { document.getElementById("clock").textContent = new Date().toTimeString().slice(0, 8); }, 1000);
+// the printing jobs advance a layer every 2s so the layer stack visibly moves
+setInterval(() => fleet.forEach(p => { if (p.state === "printing" && p.layer < p.total_layers) {
+  p.layer++; p.percent = Math.round(p.layer / p.total_layers * 100); } }), 2000);
+setInterval(() => { if (opt.faces === "rotate" && opt.view === "fleet") { tick++; render(false); } }, 3000);
+setOpt("view", "fleet");
+</script>
+</body>
+</html>

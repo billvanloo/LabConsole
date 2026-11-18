@@ -636,7 +636,7 @@ function ensurePanels() {
     const el = document.createElement("div");
     el.className = "ppanel";
     el.innerHTML = `<div class="crt">
-      <div class="phead"><span class="lamp"></span><span class="pname"></span><span class="pmodel"></span></div>
+      <div class="phead"><span class="lamp"></span><span class="pname nameglow"></span><span class="pmodel"></span></div>
       <div class="pbody"></div></div>`;
     el.addEventListener("click", () => openDetail(p.id));
     grid.appendChild(el);
@@ -778,7 +778,7 @@ function renderDetail(full) {
       <div class="dhead">
         <button class="backbtn" id="back">◂ FLEET OVERVIEW</button>
         <span class="lamp ${p.state}" id="dlamp"></span>
-        <span style="color:var(--cyan)">${esc(p.name)}</span>
+        <span class="dname nameglow">${esc(p.name)}</span>
         <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${esc(p.model)}</span>
         <span class="dstate" id="dstate"></span>
       </div>
