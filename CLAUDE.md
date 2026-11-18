@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.7.0), then confirm all 33 files are present:
+Check `VERSION` at the repo root (should read 1.7.0), then confirm all 34 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (33 files):
+Expected file manifest (34 files):
 
 ```
 ./CLAUDE.md
@@ -56,6 +56,7 @@ Expected file manifest (33 files):
 ./mockups/progress-cube-mockup.html
 ./requirements-dev.txt
 ./requirements.txt
+./scripts/install-service.sh
 ./scripts/set-hostname.sh
 ./server.py
 ./static/app.js
@@ -100,7 +101,9 @@ static/
   docs/                                 in-app "Technical Archive" — 4 pages + shared docs.css/figs.js
 build_manual.py         generates static/docs/LabConsole-Manual.pdf (reportlab)
 config.example.json     copy to config.json and fill in real printer serials/access codes
-lab-console.service     systemd unit for boot-time start
+lab-console.service     systemd unit for boot-time start (template: assumes pi, /home/pi/lab-console)
+scripts/install-service.sh installs the unit with this checkout's path + owner filled in, after
+                          checking venv/config/ffmpeg/port; --check, --uninstall, --user
 scripts/set-hostname.sh names the host (default labconsole) and sets up Avahi so the console
                           opens at http://<name>.local:<port>; --check reports only
 mockups/                standalone HTML mockups from the approval loop below — kept after

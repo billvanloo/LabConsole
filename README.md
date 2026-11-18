@@ -22,6 +22,9 @@ No printers handy? `.venv/bin/python server.py --demo` runs a full simulated fle
 Rather type a name than an IP? `sudo scripts/set-hostname.sh` names the Pi `labconsole`, so
 the console opens at `http://labconsole.local:8080` (same network only).
 
+Start it at boot: `sudo scripts/install-service.sh` installs it as a systemd service, filling in
+this folder and your account, and checks the venv, `config.json` and port first.
+
 ## Documentation
 
 Comprehensive documentation lives in the built-in **Technical Archive** -

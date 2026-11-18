@@ -413,10 +413,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                    "own libraries instead, so always start it with .venv/bin/python \u2014 plain "
                    "python3 won\u2019t see them. The systemd unit already does this."),
           *callout("note", "\u25c8 NOTE",
-                   "Paths here and in lab-console.service assume the user pi. Newer Raspberry Pi "
-                   "OS images have no default pi account \u2014 if yours differs, substitute it in "
-                   "/home/pi/lab-console and in the service file\u2019s User=, WorkingDirectory= "
-                   "and ExecStart= lines."),
+                   "Paths here assume the user pi. Newer Raspberry Pi OS images have no default "
+                   "pi account \u2014 if yours differs, substitute your own home folder. "
+                   "scripts/install-service.sh (section 04) fills in the right account and folder "
+                   "in the service file for you."),
           Paragraph("RUNNING ON UBUNTU / OTHER LINUX HOSTS", S["h3"]),
           P("The console runs unchanged on a standard Ubuntu machine (desktop or server) "
             "instead of a Raspberry Pi \u2014 nothing in the code is Pi-specific. Install the "
@@ -469,10 +469,19 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "HMS codes in Bambu\u2019s wiki format (e.g. 0300_0100_0001_0007), file list and "
             "upload failures, camera failures, and discovery problems.")]
     e += [Paragraph("04 \u00b7 RUN AT BOOT / KIOSK DISPLAY", S["h2"]), rule(),
-          CODE("sudo cp lab-console.service /etc/systemd/system/\n"
-               "sudo systemctl daemon-reload\n"
-               "sudo systemctl enable --now lab-console\n"
+          CODE("sudo scripts/install-service.sh\n"
                "journalctl -u lab-console -f     # logs"),
+          P("The script fills this checkout\u2019s folder and owner into lab-console.service "
+            "(which assumes /home/pi/lab-console) and installs it, so the console starts at boot "
+            "and restarts if it crashes. First it checks the .venv (creating it if needed), that "
+            "config.json parses and every printer has an id, serial and access code, that ffmpeg "
+            "is present, and that nothing else holds the port \u2014 usually the console started "
+            "by hand, which must be stopped first. It then starts the service and waits for the "
+            "console to answer, printing the last log lines if it doesn\u2019t. "
+            "<font face='Courier'>--user NAME</font> runs it as another account, "
+            "<font face='Courier'>--check</font> reports only, "
+            "<font face='Courier'>--uninstall</font> removes it. Safe to re-run after a git pull: "
+            "it updates the unit if needed and restarts the console."),
           P("For a wall display, run a kiosk browser: "
             "<font face='Courier'>chromium-browser --kiosk http://localhost:8080</font>. The "
             "frontend pauses panel cycling while the tab is hidden."),

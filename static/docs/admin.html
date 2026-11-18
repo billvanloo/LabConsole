@@ -103,12 +103,10 @@ nano config.json              # fill in serials + access codes
     </div>
     <div class="callout">
       <div class="ct">◈ NOTE</div>
-      <p>The paths above and in <code>lab-console.service</code> assume the user
-         <code>pi</code>. Newer Raspberry Pi OS images have no default <code>pi</code> account
-         — if you chose a different username, substitute it for <code>pi</code> in
-         <code>/home/pi/lab-console</code> here and in the service file&rsquo;s
-         <code>User=</code>, <code>WorkingDirectory=</code> and <code>ExecStart=</code>
-         lines.</p>
+      <p>The paths above assume the user <code>pi</code>. Newer Raspberry Pi OS images have no
+         default <code>pi</code> account — if you chose a different username, substitute your
+         own home folder. <code>scripts/install-service.sh</code> (section 04) fills in the
+         right account and folder in the service file for you.</p>
     </div>
 
     <h3>RUNNING ON UBUNTU / OTHER LINUX HOSTS</h3>
@@ -173,11 +171,24 @@ python3 -m venv .venv
        failures, and discovery problems.</p>
 
     <h2 id="s4"><span class="idx">04</span> RUN AT BOOT / KIOSK DISPLAY</h2>
-    <pre><code>sudo cp lab-console.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now lab-console
+    <p>Install the console as a systemd service so it starts at boot and restarts itself if it
+       crashes. From the checkout:</p>
+    <pre><code>sudo scripts/install-service.sh
 # logs:
 journalctl -u lab-console -f</code></pre>
+    <p>The script fills this checkout&rsquo;s folder and its owner&rsquo;s account into
+       <code>lab-console.service</code> (which assumes <code>/home/pi/lab-console</code>) and
+       installs it. Before starting, it checks the <code>.venv</code> (creating it and installing
+       the requirements if needed), that <code>config.json</code> parses and every printer has an
+       id, serial and access code, that <code>ffmpeg</code> is present, and that nothing else holds
+       the port &mdash; usually a copy of the console started by hand in a terminal, which has to be
+       stopped first. Then it enables and starts the service and waits for the console to answer;
+       if it doesn&rsquo;t, it prints the last log lines. Pass <code>--user NAME</code> to run it
+       as another account, <code>--check</code> to report without changing anything, or
+       <code>--uninstall</code> to stop and remove the service. It is safe to run again: after a
+       <code>git pull</code> it updates the unit if needed and restarts the console
+       (<code>sudo systemctl restart lab-console</code> does the same when the unit hasn&rsquo;t
+       changed).</p>
     <p>For a dedicated wall display, point a kiosk browser at the console, e.g.
        <code>chromium-browser --kiosk http://localhost:8080</code>. The frontend pauses its
        panel cycling while the browser tab is hidden, so an always-on display costs the Pi
