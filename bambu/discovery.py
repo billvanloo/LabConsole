@@ -3,11 +3,17 @@
 follow printers across DHCP changes without static addresses."""
 import logging
 import socket
+import struct
 import threading
 
 log = logging.getLogger("labconsole.discovery")
 
 PORTS = (2021, 1990)
+# Printers announce by multicast to this group (Bambu's wiki: 239.255.255.250 on 1990, and
+# 2021 by broadcast or multicast depending on model). Linux only delivers a multicast datagram
+# if something on the host has joined its group, so a bare bind() hears nothing there. On a
+# Mac it can appear to work only because Bambu Studio, running alongside, has joined it.
+SSDP_GROUP = "239.255.255.250"
 
 
 def _parse(datagram: bytes):
@@ -44,7 +50,14 @@ def _listen(port, on_found):
         log.warning("SSDP listener on UDP %d unavailable (%s); printers won't be "
                     "re-found on that port", port, e)
         return
-    log.info("SSDP listener on UDP %d", port)
+    try:
+        mreq = struct.pack("4s4s", socket.inet_aton(SSDP_GROUP), socket.inet_aton("0.0.0.0"))
+        s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        joined = "joined " + SSDP_GROUP
+    except OSError as e:
+        # no multicast route (e.g. no network yet): broadcasts still arrive
+        joined = f"could not join {SSDP_GROUP} ({e}); broadcast only"
+    log.info("SSDP listener on UDP %d, %s", port, joined)
     while True:
         try:
             data, addr = s.recvfrom(4096)

@@ -528,7 +528,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("<b>FTPS</b> \u2014 implicit TLS on port 990, user bblp. Lists .3mf/.gcode in the SD "
             "root (MLSD with NLST fallback) and uploads new files ahead of a project_file "
             "command."),
-          P("<b>SSDP</b> \u2014 passive listener on UDP 2021 and 1990 for printer announcements, "
+          P("<b>SSDP</b> \u2014 passive listener on UDP 2021 and 1990 for printer announcements, joining "
+            "the multicast group 239.255.255.250 they are sent to (Linux delivers multicast only to a "
+            "host that has joined it), "
             "matching serial in USN and address in Location. On address change the MQTT client "
             "reconnects. If another app holds the port, discovery is skipped and configured IPs "
             "are used."),

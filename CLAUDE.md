@@ -179,8 +179,11 @@ asyncio.run(main())"
   printer's answer to it; a 10 s `REPLY_TIMEOUT` logs "no reply", which is how cloud-mode firmware
   refusing a command shows up. Connection failures are deduped via `_problem()` so retries don't
   flood the file.
-- **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990,
-  matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
+- **SSDP discovery is passive** (`bambu/discovery.py`), listens on UDP :2021 and :1990 and
+  **joins the multicast group 239.255.255.250** (`IP_ADD_MEMBERSHIP`) — printers announce by
+  multicast, and Linux drops multicast for groups nothing on the host joined, so without the
+  join the Pi heard nothing while the Mac worked (Bambu Studio there had joined the group).
+  It matches printers by serial and updates `BambuPrinter.ip` so DHCP changes don't strand a
   printer. It's additive — `config.json` can also just hardcode an `ip` per printer.
 - **DemoPrinter mirrors BambuPrinter's public surface exactly** (`view()`, `pause()`,
   `resume()`, `stop()`, `set_light()`, `start_print()`, `.id`/`.ip`/`.camera_kind`) so
