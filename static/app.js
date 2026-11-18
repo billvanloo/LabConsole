@@ -3,7 +3,7 @@
 
 const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f", VI = "#b06cff";
 const OK = "#57e0b8";   // --ok, the palette's success hue; alert red stays fault-only
-const CYCLE_MS = 8000;
+const CYCLE_MS = 10000;   // each panel holds a face for 10s (owner's call; was 8s)
 const CELEBRATE_MS = 45000;
 const REST_KINDS = ["orbit", "radar", "scan"];
 
@@ -766,7 +766,7 @@ function panelFaceFor(p, idx) {
   if (phase === 1) {
     // `turn` grows by exactly one between a panel's animation turns (they come every 3
     // ticks), so it advances the instrument and a panel doesn't show the same one forever.
-    // tick only moves on the 8s cycle, so the face stays put between renders and telemetry
+    // tick only moves on the 10s cycle, so the face stays put between renders and telemetry
     // pushes don't swap it mid-view.
     // Count the animation turns this panel actually got. The camera rotation takes some of
     // them, and at two printers it takes every other one, so any formula on `tick` would
@@ -863,7 +863,7 @@ function renderDetail(full) {
     detailCeleb = celeb;
     clearTimeout(celebTimer);
     if (celeb) {
-      // fleet panels get swapped by the 8s cycle; the detail view has no such
+      // fleet panels get swapped by the 10s cycle; the detail view has no such
       // tick, so schedule the hand-back explicitly
       celebTimer = setTimeout(() => {
         if (currentView.name === "detail" && currentView.id === p.id) renderDetail(true);

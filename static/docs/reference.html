@@ -74,7 +74,7 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
       <tr><th>MODELS</th><th>TRANSPORT</th><th>CONSOLE RELAY</th></tr>
       <tr><td>X1 / X1C / X1E / H2D</td>
           <td>RTSPS on port <b>322</b>, URL <code>rtsps://bblp:&lt;code&gt;@&lt;ip&gt;:322/streaming/live/1</code>. Requires LAN Mode Liveview.</td>
-          <td>ffmpeg transcodes to MJPEG at a configurable fps/width; frames are re-served as <code>multipart/x-mixed-replace</code>. ffmpeg runs with <code>-tls_verify 0</code> because the printer&rsquo;s certificate is self-signed; newer ffmpeg builds verify by default. ffmpeg&rsquo;s errors go to the console log.</td></tr>
+          <td>ffmpeg transcodes to MJPEG at a configurable fps/width; frames are re-served as <code>multipart/x-mixed-replace</code>. ffmpeg runs with <code>-tls_verify 0</code> because the printer&rsquo;s certificate is self-signed and newer ffmpeg builds verify by default. Older builds (such as Raspberry Pi OS&rsquo;s) don&rsquo;t have the option on RTSPS inputs and don&rsquo;t verify either; when ffmpeg reports <code>Option tls_verify not found</code>, the relay restarts the stream without it and remembers that for later streams. ffmpeg&rsquo;s errors go to the console log.</td></tr>
       <tr><td>A1 / A1 Mini / P1</td>
           <td>Proprietary chamber-image service, TLS on port <b>6000</b>. An 80-byte auth packet (username + access code) is sent; the printer then streams length-prefixed JPEG frames at ~1 fps.</td>
           <td>Frames pass straight through to the same MJPEG endpoint — no transcoding.</td></tr>
