@@ -4,6 +4,12 @@
   "sdcard_url_base": "file:///sdcard/",
   "log_file": "lab-console.log",
   "log_level": "INFO",
+  "discovery": {
+    "rediscover_after_s": 30,
+    "subnet_scan": true,
+    "scan_subnets": [],
+    "min_interval_s": 60
+  },
   "camera": {
     "max_streams": 1,
     "rtsp_fps": 8,

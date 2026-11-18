@@ -123,7 +123,7 @@ python3 -m venv .venv
     <p>A few environment differences to check:</p>
     <ul>
       <li><b>Firewall</b> — Ubuntu often runs <code>ufw</code>, which Raspberry Pi OS does not enable by default. Allow the console&rsquo;s port: <code>sudo ufw allow 8080/tcp</code>.</li>
-      <li><b>Same LAN as the printers</b> — SSDP discovery is a passive listener; the host must sit on the same network segment as the printers, not behind a router hop or separate VLAN.</li>
+      <li><b>Same LAN as the printers</b> — discovery uses LAN broadcast, multicast, and a scan of the local /24; the host must sit on the same network segment as the printers, not behind a router hop or separate VLAN. If the printers are on a different subnet, list it in <code>discovery.scan_subnets</code>.</li>
       <li><b>Laptops</b> — Wi-Fi power-saving can drop the idle discovery socket or let the machine sleep. Disable suspend and Wi-Fi power management, or use a wired/always-on machine.</li>
     </ul>
     <div class="callout">
@@ -140,7 +140,7 @@ python3 -m venv .venv
       <tr><td>model</td><td>Display label (X1 CARBON, H2D, A1 MINI, …).</td></tr>
       <tr><td>serial</td><td>Printer serial number — used for MQTT topics and SSDP matching.</td></tr>
       <tr><td>access_code</td><td>LAN access code from the printer screen.</td></tr>
-      <tr><td>ip</td><td>Optional. SSDP discovery fills and updates it automatically; a static or DHCP-reserved address makes startup instant.</td></tr>
+      <tr><td>ip</td><td>Optional. Discovery fills it in and follows the printer when DHCP gives it a new address (see <code>discovery</code> below). A static or DHCP-reserved address makes startup instant and avoids the gap while a moved printer is re-found.</td></tr>
       <tr><td>camera</td><td><code>rtsp</code> for X1-series and H2D, <code>chamber</code> for A1 / A1 Mini / P1-series, <code>none</code> to disable.</td></tr>
     </table>
     <h3>GLOBAL</h3>
@@ -148,6 +148,10 @@ python3 -m venv .venv
       <tr><th>FIELD</th><th>DEFAULT</th><th>MEANING</th></tr>
       <tr><td>http_port</td><td>8080</td><td>Port the console serves on.</td></tr>
       <tr><td>max_upload_mb</td><td>200</td><td>Upload size limit for .3mf files.</td></tr>
+      <tr><td>discovery.rediscover_after_s</td><td>30</td><td>How long a printer must be unreachable before the console goes looking for it at a new address.</td></tr>
+      <tr><td>discovery.subnet_scan</td><td>true</td><td>Last-resort search: probe the local /24 for printers on port 8883. Each candidate is identified by the serial in its TLS certificate, or by logging in with the missing printer's access code. Turn off if port scans on your network are unwelcome.</td></tr>
+      <tr><td>discovery.scan_subnets</td><td>[]</td><td>Subnets to scan, e.g. <code>["192.168.20.0/24"]</code>. Empty means the console host's own /24.</td></tr>
+      <tr><td>discovery.min_interval_s</td><td>60</td><td>Minimum time between search passes. Passes that find nothing back off, doubling up to 10 minutes, so a printer that is simply switched off isn't scanned all weekend.</td></tr>
       <tr><td>camera.max_streams</td><td>1</td><td>Concurrent camera relays. Keep at 1 on a Pi 3; a Pi 4/5 can take more. A new viewer evicts the oldest when the limit is hit.</td></tr>
       <tr><td>camera.rtsp_fps</td><td>8</td><td>Relay frame rate for RTSPS cameras (transcode cost knob).</td></tr>
       <tr><td>camera.rtsp_width</td><td>640</td><td>Relay width for RTSPS cameras.</td></tr>
@@ -183,7 +187,7 @@ journalctl -u lab-console -f</code></pre>
       <tr><th>SYMPTOM</th><th>LIKELY CAUSE / FIX</th></tr>
       <tr><td>Anything not working as expected</td><td>Start with <code>lab-console.log</code> in the console folder (section 03). It records each command with the printer&rsquo;s reply, and each connection, camera, and file error.</td></tr>
       <tr><td>Browser shows &ldquo;invalid response&rdquo; or half-loaded pages over the network, while <code>localhost</code> works</td><td>The operating system&rsquo;s <code>sendfile</code> shortcut cutting replies short, seen on macOS. The console turns it off at startup (<code>AIOHTTP_NOSENDFILE=1</code>); if you run an older copy, start it with that variable set: <code>AIOHTTP_NOSENDFILE=1 .venv/bin/python server.py config.json</code>.</td></tr>
-      <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, that the access code matches, and (for LAN Only printers) Developer Mode. If IPs changed, discovery re-finds printers within a minute of their next announcement. If <em>every</em> panel is OFFLINE, the network may isolate Wi-Fi clients — see the network requirement in section 01.</td></tr>
+      <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, that the access code matches, and (for LAN Only printers) Developer Mode. If it got a new IP from DHCP, the console finds it again on its own, usually within a minute (SSDP search, then a subnet scan); <code>lab-console.log</code> shows each search and where the printer turned up. A DHCP reservation per printer avoids the gap entirely. If <em>every</em> panel is OFFLINE, the network may isolate Wi-Fi clients — see the network requirement in section 01.</td></tr>
       <tr><td>Pause / stop / light has no effect</td><td>Check the log for that command. <code>no reply</code> or <code>printer REJECTED</code> means the printer is in cloud mode and its firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch that printer to LAN Only + Developer Mode.</td></tr>
       <tr><td>X1/H2D camera NO SIGNAL</td><td>LAN Mode Liveview disabled, or ffmpeg not installed. Some H2D firmware versions have temporarily shipped without local liveview pending updates — status and control keep working.</td></tr>
       <tr><td>Camera face stays black</td><td>The console log gives the reason on lines starting <code>[camera …]</code> (<code>lab-console.log</code>, <code>journalctl -u lab-console -f</code>, or the terminal running <code>server.py</code>). <code>certificate verify failed</code> comes from a console copy older than the fix that accepts the printer&rsquo;s self-signed certificate, run with a newer ffmpeg; <code>Option tls_verify not found</code> comes from an older console copy run with an older ffmpeg (such as Raspberry Pi OS&rsquo;s). The current console handles both. Update it.</td></tr>

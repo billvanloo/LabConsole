@@ -55,6 +55,9 @@ class BambuPrinter:
         self._stop = False
         self._pending = {}          # sequence_id -> command name, awaiting a reply
         self._last_problem = None   # dedupes repeated connect failures in the log
+        # When the printer last went offline (monotonic), or None while online. Starts set:
+        # a printer is offline until its first connect. Read by discovery.Rediscovery.
+        self._offline_since = time.monotonic()
 
     # ------------------------------------------------- connection
     def start(self):
@@ -114,11 +117,22 @@ class BambuPrinter:
         except Exception:
             pass
 
+    @property
+    def online(self):
+        return self._online
+
+    def offline_for(self):
+        """Seconds since the printer went offline (0 while online)."""
+        since = self._offline_since
+        return 0.0 if since is None else time.monotonic() - since
+
     def set_ip(self, ip):
         """Called by discovery. Only moves the address; _run() does the reconnecting."""
         if ip and ip != self.ip:
             log.info("%s: address changed %s -> %s (discovery)", self.id, self.ip, ip)
             self.ip = ip
+            if not self._online:
+                self._offline_since = time.monotonic()  # fresh grace period at the new address
             c = self._client
             if c:
                 try:
@@ -159,6 +173,7 @@ class BambuPrinter:
     def _set_online(self, val):
         if self._online != val:
             self._online = val
+            self._offline_since = None if val else time.monotonic()
             self.on_change(self)
 
     # ------------------------------------------------- reports

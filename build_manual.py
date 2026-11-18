@@ -424,9 +424,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           LI("<b>Firewall</b> \u2014 Ubuntu often runs ufw, which Raspberry Pi OS does not "
              "enable by default. Allow the port: <font face='Courier'>sudo ufw allow "
              "8080/tcp</font>."),
-          LI("<b>Same LAN as the printers</b> \u2014 SSDP discovery is passive; the host must "
-             "sit on the same network segment as the printers, not behind a router hop or "
-             "separate VLAN."),
+          LI("<b>Same LAN as the printers</b> \u2014 discovery uses broadcast, multicast, and a "
+             "scan of the local /24; the host must sit on the same network segment as the "
+             "printers. For another subnet, list it in discovery.scan_subnets."),
           LI("<b>Laptops</b> \u2014 Wi-Fi power-saving can drop the idle discovery socket or "
              "let the machine sleep. Disable suspend/Wi-Fi power management, or use a "
              "wired/always-on machine."),
@@ -441,13 +441,17 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["name / model", "Display name (shown large and glowing in each panel header; keep it short, long names are cut off) and model label."],
         ["serial", "Printer serial \u2014 used for MQTT topics and SSDP matching."],
         ["access_code", "LAN access code from the printer screen."],
-        ["ip", "Optional; discovery fills and updates it. A static/reserved address makes startup instant."],
+        ["ip", "Optional; discovery fills it in and follows DHCP changes. A static/reserved address makes startup instant."],
         ["camera", "rtsp (X1-series, H2D) \u00b7 chamber (A1/A1 Mini/P1) \u00b7 none."],
     ], [1.3 * inch, 5.1 * inch])
     e += [Paragraph("CONFIG REFERENCE \u2014 GLOBAL", S["h3"])]
     e += ref_table(["FIELD", "DEFAULT", "MEANING"], [
         ["http_port", "8080", "Port the console serves on."],
         ["max_upload_mb", "200", "Upload size limit."],
+        ["discovery.rediscover_after_s", "30", "Seconds unreachable before searching for the printer at a new address."],
+        ["discovery.subnet_scan", "true", "Last resort: probe the local /24 on port 8883; identify by TLS certificate serial or access-code login."],
+        ["discovery.scan_subnets", "[]", "Subnets to scan; empty means the host's own /24."],
+        ["discovery.min_interval_s", "60", "Minimum time between search passes; empty passes back off up to 10 min."],
         ["camera.max_streams", "1", "Concurrent camera relays; keep 1 on a Pi 3. New viewers evict the oldest."],
         ["camera.rtsp_fps / rtsp_width", "8 / 640", "RTSPS transcode cost knobs."],
         ["sdcard_url_base", "file:///sdcard/", "Switch to file:///mnt/sdcard/ if start-print reports file-not-found."],
@@ -475,7 +479,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
         ["Browser: invalid response or half-loaded pages over the network (localhost works)", "The OS sendfile shortcut cutting replies short, seen on macOS. The console turns it off at startup (AIOHTTP_NOSENDFILE=1); start an older copy with that variable set."],
-        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. Discovery re-finds moved printers within about a minute. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
+        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. If DHCP moved it, the console re-finds it on its own, usually within a minute; lab-console.log shows each search. A DHCP reservation avoids the gap. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
         ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
         ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means an older console copy run with a newer ffmpeg; \u2018Option tls_verify not found\u2019 an older copy run with an older ffmpeg (e.g. Raspberry Pi OS). The current console handles both: update it."],
@@ -539,8 +543,13 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "the multicast group 239.255.255.250 they are sent to (Linux delivers multicast only to a "
             "host that has joined it), "
             "matching serial in USN and address in Location. On address change the MQTT client "
-            "reconnects. If another app holds the port, discovery is skipped and configured IPs "
-            "are used."),
+            "reconnects. If another app holds the port, that listener is skipped with a warning."),
+          P("<b>Rediscovery</b> \u2014 a watchdog checks the fleet every 5 s. A printer offline for "
+            "discovery.rediscover_after_s triggers a pass: active M-SEARCH probes, then, for any "
+            "still missing, a scan of the local /24 for TCP 8883, identifying each candidate by "
+            "the serial in its TLS certificate CN, else by an MQTT login with the printer\u2019s own "
+            "access code. Passes back off to 10 minutes while they find nothing; /cam/<id> returns "
+            "503 while the printer is offline."),
           Paragraph("04 \u00b7 WEBSOCKET SCHEMA", S["h2"]), rule(),
           CODE('{ "type":"fleet", "version":123, "demo":false, "printers":[ {\n'
                '    "id":"voyager01","name":"VOYAGER-01","model":"X1 CARBON",\n'

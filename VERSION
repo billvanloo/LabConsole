@@ -1,12 +1,12 @@
 Lab Console
-version: 1.6.0
+version: 1.7.0
 date: 2026-11-18
 tree: lab-console/
 
 Feature set at this version:
   - MQTT monitor + control (pause/resume/stop/light/start-print)
   - Per-model camera relay (RTSPS :322 for X1C/H2D, chamber :6000 for A1)
-  - FTPS SD listing + upload, passive SSDP discovery
+  - FTPS SD listing + upload, SSDP discovery
   - Demo mode (server.py --demo)
   - In-app Technical Archive at /docs (4 pages)
   - PDF manual (build_manual.py -> static/docs/LabConsole-Manual.pdf)
@@ -20,6 +20,7 @@ Feature set at this version:
   - Layer stack face, alternating with the ambient instruments while printing/paused (1.5)
   - Printer names large and glowing in every panel header (1.6)
   - Progress cube face: wedge meter + spinning isometric cube, in the rotation (1.6)
+  - Rediscovery when a printer stays offline: SSDP search, then subnet scan (1.7)
 
 If any of the above is missing from your working tree, you have an outdated
 copy. See the FILE MANIFEST section of CLAUDE.md to verify.
