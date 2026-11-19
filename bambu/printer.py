@@ -58,6 +58,10 @@ class BambuPrinter:
         self.name = cfg.get("name", cfg["id"])
         self.model = cfg.get("model", "?")
         self.serial = cfg["serial"]
+        # "cloud": true in config.json: the printer stays on Bambu Cloud, whose firmware
+        # refuses print control from the console (see _AUTH_REFUSED), so the console
+        # doesn't offer it. Monitoring, the camera, the light and upload are unaffected.
+        self.cloud = bool(cfg.get("cloud", False))
         self.access_code = str(cfg["access_code"])
         self.ip = cfg.get("ip")  # may be filled/updated by discovery
         self.camera_kind = cfg.get("camera", "rtsp")  # rtsp | chamber | none
@@ -350,6 +354,7 @@ class BambuPrinter:
                 })
         return {
             "id": self.id, "name": self.name, "model": self.model,
+            "cloud": self.cloud,
             "ams": ams_trays,
             "camera": self.camera_kind if self.ip else "none",
             "state": state,

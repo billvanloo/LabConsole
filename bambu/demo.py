@@ -27,6 +27,7 @@ class DemoPrinter:
         self.camera_kind = "demo"
         self.on_change = on_change or (lambda p: None)
         self.script = cfg.get("script", "idle")
+        self.cloud = bool(cfg.get("cloud", False))
 
         self._lock = threading.Lock()
         self._state = "idle"
@@ -145,6 +146,7 @@ class DemoPrinter:
             warm = s in ("printing", "paused")
             return {
                 "id": self.id, "name": self.name, "model": self.model,
+                "cloud": self.cloud,
                 "ams": [{"type": "PLA", "color": "#3fd8ff"},
                         {"type": "PLA", "color": "#ffc94d"},
                         {"type": "PETG", "color": "#e8e8e8"},
@@ -172,6 +174,7 @@ class DemoPrinter:
 
 DEMO_FLEET = [
     {"id": "voyager01", "name": "VOYAGER-01", "model": "X1 CARBON", "script": "printing"},
-    {"id": "outpost02", "name": "OUTPOST-02", "model": "H2D", "script": "idle"},
+    {"id": "outpost02", "name": "OUTPOST-02", "model": "H2D", "script": "idle",
+     "cloud": True},
     {"id": "scout03", "name": "SCOUT-03", "model": "A1 MINI", "script": "trouble"},
 ]

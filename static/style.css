@@ -265,6 +265,14 @@ canvas.reticle{display:none}
 .cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
 .cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
 .cbtn.wide{grid-column:1/-1;border-style:dashed}
+/* cloud-mode printer (config "cloud": true): no print control, so the detail view says where
+   it lives instead; mockups/cloud-controls-mockup.html, option A */
+.cloudtag{font-size:9px;letter-spacing:.25em;color:var(--text-dim);border:1px solid #1c2a4a;
+  border-radius:3px;padding:2px 6px}
+.cloudnote{grid-column:1/-1;font-size:10px;letter-spacing:.18em;line-height:1.7;
+  color:var(--text-dim);text-align:center;padding:2px 4px 0}
+.cloudnote b{color:#9fb4d2;font-weight:normal}
+.modal .uplnote{font-size:10px;letter-spacing:.15em;line-height:1.7;color:var(--text-dim);margin:-2px 0 12px}
 
 /* ---------- modals ---------- */
 .dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;

@@ -49,7 +49,8 @@
        chamber light, and file upload work. Pause is refused (<code>mqtt message verify
        failed</code>); resume, stop, and start print are the same kind of command and are
        expected to be refused too. Use the printer&rsquo;s screen, Bambu Studio, or Bambu Handy
-       for those. The printer also raises HMS <code>0500_0500_0001_0007</code> (&ldquo;MQTT
+       for those, and set <code>"cloud": true</code> on that printer in <code>config.json</code>
+       (section 03) so the console stops offering them. The printer also raises HMS <code>0500_0500_0001_0007</code> (&ldquo;MQTT
        command verification failed&rdquo;) when it refuses one; the console logs it as a notice
        rather than showing ERROR, since the print carries on.</p>
     <p>Then, on <b>each printer</b>:</p>
@@ -166,6 +167,7 @@ python3 -m venv .venv
       <tr><td>access_code</td><td>LAN access code from the printer screen.</td></tr>
       <tr><td>ip</td><td>Optional. Discovery fills it in and follows the printer when DHCP gives it a new address (see <code>discovery</code> below). A static or DHCP-reserved address makes startup instant and avoids the gap while a moved printer is re-found.</td></tr>
       <tr><td>camera</td><td><code>rtsp</code> for X1-series and H2D, <code>chamber</code> for A1 / A1 Mini / P1-series, <code>none</code> to disable.</td></tr>
+      <tr><td>cloud</td><td>Optional, default <code>false</code>. Set <code>true</code> for a printer left on Bambu Cloud: its firmware refuses pause, resume, stop and start print from the console, so the detail view drops those buttons, offers <b>UPLOAD TO SD…</b> instead of START PRINT…, and says where print control lives. The server also refuses those commands for it, so the printer never raises its verification-failed alert. Monitoring, the camera, the light and upload are unaffected.</td></tr>
     </table>
     <h3>GLOBAL</h3>
     <table class="ref">

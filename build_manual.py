@@ -336,6 +336,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["\u25a0 STOP", "Aborts the job. Always asks for confirmation first."],
         ["\u2600 LIGHT", "Toggles the chamber light \u2014 useful before judging a camera view."],
         ["\u25b2 START PRINT\u2026", "Pick a sliced .3mf on the printer\u2019s SD card, or upload one. Selecting a file arms START."],
+        ["UPLOAD TO SD\u2026", "Replaces START PRINT on a printer tagged CLOUD: the same dialog without START. "
+                                "Start the file from the printer\u2019s screen (Files), Bambu Studio or Handy. "
+                                "A CLOUD printer has no PAUSE or STOP either; its firmware refuses them."],
     ], [1.5 * inch, 4.9 * inch])
     e += callout("danger", "\u25b2 CAUTION",
                  "STOP cannot be undone \u2014 a stopped job restarts from zero. The console always "
@@ -380,7 +383,8 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "camera, the chamber light, and file upload work. Pause is refused (\u2018mqtt message "
             "verify failed\u2019); resume, stop, and start print are the same kind of command and "
             "are expected to be refused too, so use the printer\u2019s screen, Bambu Studio, or "
-            "Bambu Handy for those. The HMS 0500_0500_0001_0007 the printer raises on a refusal "
+            "Bambu Handy for those, and set \u201ccloud\u201d: true on that printer in config.json so "
+            "the console stops offering them. The HMS 0500_0500_0001_0007 the printer raises on a refusal "
             "is logged as a notice, not shown as ERROR, since the print carries on."),
           P("Then, on each printer:"),
           LI("Update to recent firmware."),
@@ -467,6 +471,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["access_code", "LAN access code from the printer screen."],
         ["ip", "Optional; discovery fills it in and follows DHCP changes. A static/reserved address makes startup instant."],
         ["camera", "rtsp (X1-series, H2D) \u00b7 chamber (A1/A1 Mini/P1) \u00b7 none."],
+        ["cloud", "Optional, default false. true for a printer left on Bambu Cloud: the detail view "
+                  "drops pause/stop/start print (the firmware refuses them), offers UPLOAD TO SD "
+                  "instead, and the server refuses those commands. Light, camera and upload are unaffected."],
     ], [1.3 * inch, 5.1 * inch])
     e += [Paragraph("CONFIG REFERENCE \u2014 GLOBAL", S["h3"])]
     e += ref_table(["FIELD", "DEFAULT", "MEANING"], [
