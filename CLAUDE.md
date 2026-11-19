@@ -10,8 +10,14 @@ Raspberry Pi 3+ (also runs unchanged on Ubuntu/other Linux). No cloud dependency
 the console talks to printers only over the local network. Printers may be in LAN Only +
 Developer Mode (full control) *or* left on Bambu Cloud, which the owner's school lab
 requires so students can print from Bambu Studio: there, local status and cameras work
-(verified on an X1C) but firmware may refuse some commands. Don't reintroduce wording
-that makes Developer Mode a requirement.
+(verified on X1C and H2D), as do the light and FTPS upload, but Authorization Control
+firmware refuses pause/resume/stop/start print with `mqtt message verify failed` (pause
+confirmed on the H2D) and raises HMS `0500_0500_0001_0007`, which `_HMS_NOT_FAULTS` in
+`printer.py` keeps out of the ERROR state. A printer marked `"cloud": true` in config.json
+(`BambuPrinter.cloud`, in `view()`) loses pause/stop/start in the detail view, gets UPLOAD TO
+SD… (upload-only dialog) and a CLOUD tag, and `server.py` refuses `CLOUD_REFUSED` actions for
+it — `mockups/cloud-controls-mockup.html`, option A; demo's OUTPOST-02 is one. Don't reintroduce wording that makes Developer
+Mode a requirement.
 
 Visual style is a deliberate design constraint, not incidental: a dark navy CRT-panel
 aesthetic with cyan vector line art, amber accents, and red/orange reserved *exclusively*
@@ -25,14 +31,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.8.0), then confirm all 35 files are present:
+Check `VERSION` at the repo root (should read 1.8.0), then confirm all 36 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (35 files):
+Expected file manifest (36 files):
 
 ```
 ./CLAUDE.md
@@ -47,6 +53,7 @@ Expected file manifest (35 files):
 ./config.example.json
 ./lab-console.service
 ./mockups/address-prompt-mockup.html
+./mockups/cloud-controls-mockup.html
 ./mockups/detail-view-mockup.html
 ./mockups/fleet-cycle-mockup.html
 ./mockups/fleet-layout-mockup.html
@@ -291,7 +298,7 @@ mockup round:
   (bucketed when blocks would drop below 7 px), current layer amber and pulsing, violet and
   steady when paused. It reads `fleet` by printer id every frame, so pushes never tear it
   down; finished blocks are cached offscreen. It assumes `layer_num` is the 1-based layer
-  being printed (finished = `layer_num - 1`) — unconfirmed against real firmware. The
+  being printed (finished = `layer_num - 1`) — confirmed on the owner's printers. The
   **progress cube** (`progressCube()`, `mockups/progress-cube-mockup.html`, option A) is the
   other face in that rotation and an idle resting face: a tapered wedge meter of the job's
   percent and a glowing isometric wireframe cube (spins printing, holds when paused, drifts

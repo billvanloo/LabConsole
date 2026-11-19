@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud-Mode Controls — Lab Console Mockup</title>
+<style>
+/* ===== repo static/style.css, verbatim ===== */
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+/* The printer's display name (config.json "name"): the state word's typeface and size, in
+   the header above every face so it never moves as faces cycle, with a stronger phosphor glow
+   than anything else on the panel and a faint stepped flicker. Cyan in every state: it is
+   identity, not status, and red stays error-only. Approved as option A of
+   mockups/printer-name-mockup.html. */
+.nameglow{color:#e6fbff;letter-spacing:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  text-shadow:0 0 1px #fff, 0 0 5px rgba(63,216,255,.95), 0 0 12px rgba(63,216,255,.75),
+              0 0 26px rgba(63,216,255,.45), 0 0 44px rgba(63,216,255,.22);
+  animation:phosphor 7s steps(1) infinite}
+@keyframes phosphor{0%{opacity:1}61%{opacity:.84}62%{opacity:1}63%{opacity:.9}64%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.nameglow{animation:none}}
+.phead{gap:10px}
+.phead .lamp{width:12px;height:12px}
+.phead .pname{font-size:15px}
+/* the model label keeps its line when a long name is cut short */
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto;white-space:nowrap;flex:0 0 auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+/* Wide, tall screens (a fullscreen lab display): two panels across, and two rows fill
+   the screen, so a 3-4 printer fleet gets about a quarter of the display per panel. A 3rd
+   printer sits bottom-left, keeping the slot a 4th will fill; a 5th+ scrolls to a third
+   row. Type and meters scale with the panel through container units, so the readout
+   carries across the room. Narrow windows and phones keep the auto-fit grid above.
+   Approved in mockups/fleet-layout-mockup.html (option A). */
+@media (min-width:1000px) and (min-height:560px){
+  #fleet{container-type:size}
+  #fleet .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc((100cqh - 36px) / 2)}
+  #fleet .ppanel{display:flex}
+  #fleet .ppanel .crt{flex:1;min-height:0;container-type:inline-size}
+  #fleet .phead{font-size:clamp(11px,1.45cqw,16px);padding:1.4cqw 1.8cqw 1cqw;gap:1.4cqw}
+  #fleet .phead .pname{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .phead .lamp{width:clamp(12px,1.9cqw,22px);height:clamp(12px,1.9cqw,22px)}
+  #fleet .phead .pmodel{font-size:clamp(9px,1.1cqw,13px)}
+  #fleet .pbody{padding:1.2cqw 2.2cqw 1.8cqw;gap:clamp(7px,1.3cqw,16px)}
+  #fleet .statword{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .fname{font-size:clamp(11px,2.1cqw,22px)}
+  #fleet .kv,#fleet .errline{font-size:clamp(10px,1.8cqw,19px)}
+  #fleet .progrow{gap:1.6cqw}
+  #fleet .pbar{height:clamp(10px,1.7cqw,18px)}
+  #fleet .ppct{font-size:clamp(12px,2.8cqw,30px)}
+  /* the markup pins the wedge at 34px; wedge() sizes its drawing from the CSS box */
+  #fleet canvas.wedge{width:clamp(34px,6.5cqw,72px)!important;height:clamp(34px,6.5cqw,72px)!important}
+  #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
+  #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
+  #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackread{font-size:clamp(9px,1.3cqw,15px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackbucket{font-size:clamp(8px,1.1cqw,13px);right:1.6cqw;top:.6cqw}
+
+  /* status faces with progress get a large open-arc reticle beside the readout, filling the
+     band that otherwise sits empty at this size (option C of
+     mockups/large-panel-options-mockup.html). The reticle replaces the small wedge here. */
+  /* The reticle's column has a set width. With "auto", the grid sized it from the canvas's
+     backing store, which fit() makes devicePixelRatio times the CSS size, so on a Retina
+     display the column grew and squeezed the readout into a narrow strip. */
+  #fleet .pbody:has(>canvas.reticle){display:grid;grid-template-columns:minmax(0,1fr) min(40cqw,45%);
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  #fleet .pbody:has(>canvas.reticle)>:is(.statword,.fname,.kv,.errline){grid-column:1}
+  #fleet .pbody>canvas.reticle{display:block;grid-column:2;grid-row:1 / 6;align-self:center;
+    width:100%;aspect-ratio:1;height:auto}
+  #fleet .pbody:has(>canvas.reticle)>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  #fleet .pbody:has(>canvas.reticle) canvas.wedge{display:none}
+  /* idle faces have no progress to show: center their readout instead */
+  #fleet .pbody:has(>.statword.idle){justify-content:center}
+}
+/* outside the two-across layout the reticle stays hidden and the small wedge does the job */
+canvas.reticle{display:none}
+
+/* Detail view on a wide, tall screen: fill it. The camera takes the left column above
+   larger controls; the readings fill the right column and scale with it (container
+   units), headed by a progress block with the reticle. Narrow windows keep the layout
+   above, without the block. Approved as option B of mockups/detail-view-mockup.html
+   (issue #6). */
+.dprog{display:none}
+@media (min-width:1000px) and (min-height:560px){
+  #detail .dhead{padding:12px 14px}
+  #detail .dstate{font-size:16px;letter-spacing:.3em}
+  #detail .detailgrid{flex:1;min-height:0;grid-template-columns:1.35fr .65fr;grid-template-rows:minmax(0,1fr)}
+  #detail .dblock{display:flex;flex-direction:column;min-height:0}
+  #detail .dcrt.cam{flex:1;min-height:0}
+  #detail .dcrt.cam canvas,#detail .dcrt.cam img{height:100%!important;width:100%}
+  #detail .camtag{font-size:13px;left:14px;top:12px}
+  #detail .ctrls{gap:10px;padding:14px 4px 4px}
+  #detail .cbtn{font-size:15px;padding:20px 8px}
+  /* the right column stops short of the fixed corner FLEET button */
+  #detail .detailgrid>.dblock:last-child{margin-bottom:78px;container-type:inline-size}
+  #telem{flex:1;min-height:0;display:flex;flex-direction:column}
+  #telem .telem{flex:1;grid-auto-rows:1fr}
+  #telem .tcell{padding:1.6cqw 2.4cqw;display:flex;flex-direction:column;justify-content:center}
+  #telem .tcell .tl{font-size:clamp(9px,1.7cqw,14px);margin-bottom:.8cqw}
+  #telem .tcell .tv{font-size:clamp(17px,4.6cqw,42px)}
+  #telem .tcell .tv small{font-size:clamp(10px,2cqw,18px)}
+  #telem .tcell .tv.file{font-size:clamp(11px,2.6cqw,22px)}
+  #telem .tcell.inprog{display:none}
+  /* five readings left below the block: the last spans the row so no slot sits empty */
+  #telem .telem>.tcell:last-child{grid-column:1 / -1}
+  #telem .amslbl{font-size:clamp(9px,1.5cqw,13px);padding:1.6cqw 2.4cqw 0}
+  #telem .ams{padding:1.4cqw 2.4cqw 2cqw;gap:1.4cqw}
+  #telem .slot{font-size:clamp(9px,1.6cqw,14px);padding:1.2cqw 1.4cqw}
+  #telem .slot i{height:clamp(5px,1cqw,9px);margin-bottom:1cqw}
+  #telem .hmsbox{font-size:clamp(10px,2.4cqw,20px);padding:1.6cqw 2.4cqw}
+  /* fixed reticle column, for the same devicePixelRatio reason as the fleet status face */
+  #telem .dprog{display:grid;grid-template-columns:min(34cqw,260px) minmax(0,1fr);gap:2.6cqw;align-items:center;
+    padding:2cqw 2.4cqw;border-bottom:1px solid #101c36;background:var(--panel-deep)}
+  #telem .dprog.noret{grid-template-columns:1fr}
+  #telem .dprog canvas.reticle{display:block;width:100%;aspect-ratio:1;height:auto}
+  #telem .dprog .tl{font-size:clamp(9px,1.7cqw,14px);letter-spacing:.25em;color:var(--text-dim);margin:1.2cqw 0 .5cqw}
+  #telem .dprog .tl:first-child{margin-top:0}
+  #telem .dprog .file{font-size:clamp(11px,2.6cqw,22px);color:#bfe9ff;word-break:break-all;line-height:1.35}
+  #telem .dprog .big{font-size:clamp(20px,6cqw,56px);color:var(--amber)}
+  #telem .dprog .big.vi{color:var(--violet)} #telem .dprog .big.al{color:var(--alert)}
+  #telem .dprog .big.idle{color:var(--cyan)} #telem .dprog .big.offline{color:#3a4a66}
+  #telem .dprog .mid{font-size:clamp(14px,3.6cqw,32px);color:var(--cyan)}
+  #telem .dprog .mid small{font-size:.55em;color:var(--text-dim)}
+}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+/* layer stack overlays (mockups/layer-stack-mockup.html) */
+.stackread{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+  letter-spacing:.15em;z-index:2}
+.stackread b{color:var(--cyan);font-weight:400}
+.stackbucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+  color:var(--amber);z-index:2}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+/* not ".dim": that's the modal overlay (position:fixed, full screen, z-index 50), and sharing
+   the name turned this tag into an invisible sheet that swallowed every tap */
+.camtag.nosig{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+/* ---------- detail view ---------- */
+#detail{flex:1;display:flex;flex-direction:column;overflow:auto}
+.dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
+  letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
+.dhead .lamp{width:9px;height:9px;border-radius:50%}
+/* the way back to the fleet is lit and sized to find at a glance, plus a corner button in
+   thumb reach on a touch screen; Esc also works (mockups/large-panel-options-mockup.html, D2) */
+.backbtn{font-family:inherit;font-size:13px;letter-spacing:.25em;padding:11px 20px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+.backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetfab:hover{background:rgba(14,26,52,.95)}
+.dstate{margin-left:auto;font-size:11px;color:var(--amber)}
+.dhead .dname{font-size:22px}
+.detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
+@media (max-width:720px){.detailgrid{grid-template-columns:1fr}}
+.dblock{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:14px;padding:8px}
+.dcrt{position:relative;background:var(--panel-deep);border-radius:9px;
+  border:1px solid #0d1526;overflow:hidden}
+.dcrt.cam{min-height:250px;display:flex;align-items:center;justify-content:center}
+.dcrt.cam img{width:100%;height:250px;object-fit:contain;background:#04060c}
+.telem{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#101c36}
+.tcell{background:var(--panel-deep);padding:10px 12px}
+.tcell .tl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-bottom:5px}
+.tcell .tv{font-size:17px;color:var(--cyan)}
+.tcell .tv small{font-size:10px;color:var(--text-dim)}
+.tcell .tv.warm{color:var(--amber)}
+.tcell .tv.file{font-size:11px;line-height:1.5;word-break:break-all}
+.amslbl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);padding:10px 12px 0}
+.ams{display:flex;gap:8px;padding:10px 12px;background:var(--panel-deep)}
+.slot{flex:1;border:1px solid #1c2a4a;border-radius:4px;padding:7px 8px;
+  font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.slot i{display:block;height:5px;border-radius:2px;margin-bottom:6px;background:#2a3247}
+.hmsbox{padding:10px 12px;font-size:10px;color:#ffb49b;line-height:1.6;background:var(--panel-deep)}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.cbtn{font-family:inherit;font-size:11px;letter-spacing:.25em;padding:13px 6px;
+  border-radius:6px;cursor:pointer;background:rgba(63,216,255,.05);
+  border:1px solid var(--cyan-dim);color:var(--cyan)}
+.cbtn:disabled{opacity:.3;cursor:default}
+.cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
+.cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
+.cbtn.wide{grid-column:1/-1;border-style:dashed}
+
+/* ---------- modals ---------- */
+.dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;
+  align-items:center;justify-content:center;z-index:50}
+.modal{width:min(440px,92%);background:var(--bezel);border:1px solid #3a1c12;
+  border-radius:12px;padding:8px;box-shadow:0 0 30px rgba(255,90,42,.15)}
+.modal .inner{border:1px solid #2a1108;border-radius:8px;background:var(--panel-deep);padding:18px}
+.modal h3{font-size:13px;letter-spacing:.3em;color:var(--alert);margin-bottom:10px}
+.modal p{font-size:11px;color:#9fb4d2;line-height:1.6;margin-bottom:16px;word-break:break-word}
+.modal .row{display:flex;gap:8px}
+.modal.cyanline{border-color:#1c2a4a;box-shadow:0 0 30px rgba(63,216,255,.1)}
+.modal.cyanline .inner{border-color:#14203d}
+.modal.cyanline h3{color:var(--cyan)}
+.flist{list-style:none;margin-bottom:14px;border:1px solid #14203d;border-radius:4px;
+  max-height:180px;overflow:auto}
+.flist li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;
+  font-size:10.5px;border-bottom:1px solid #0e1830;color:#bfe9ff;cursor:pointer}
+.flist li span{color:var(--text-dim)}
+.flist li.sel{background:rgba(63,216,255,.08);outline:1px solid var(--cyan-dim)}
+.flist li.empty{color:var(--text-dim);cursor:default;justify-content:center}
+.upl{border:1px dashed #1c2a4a;border-radius:4px;text-align:center;color:var(--text-dim);
+  font-size:10px;letter-spacing:.2em;padding:12px;margin-bottom:14px;cursor:pointer}
+.upl.busy{color:var(--amber);border-color:#8c5a1e}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:var(--bezel);border:1px solid var(--cyan-dim);color:var(--cyan);
+  font-size:10px;letter-spacing:.2em;padding:9px 16px;border-radius:6px;z-index:60;
+  box-shadow:0 0 18px rgba(63,216,255,.15)}
+.toast.err{border-color:#8c2c12;color:var(--alert)}
+.hidden{display:none !important}
+
+/* ---------- lost printers: address prompt + search (v1.8, mockups/address-prompt-mockup.html) ---------- */
+.askline{font-size:10px;color:#9fb4d2;letter-spacing:.1em;line-height:1.55}
+.askline b{color:#e6fbff;font-weight:400}
+.askrow{display:flex;gap:8px;margin-top:auto;position:relative;z-index:2}
+.askrow .cbtn{flex:1;padding:11px 6px}
+.cbtn.addr{border-color:#d7e6f7;color:#f2f8ff;background:rgba(242,248,255,.06)}
+.cbtn.later{color:var(--text-dim);border-color:#1c2a4a}
+.askclock{font-size:9px;letter-spacing:.18em;color:var(--text-dim);position:relative;z-index:2}
+.askclock b{color:#e6fbff;font-weight:400}
+.searchbox{position:absolute;right:10px;top:4px;width:44%;height:62%;opacity:.55;pointer-events:none}
+.needchip{color:#f2f8ff}
+@media (min-width:1000px){.fleetchip{white-space:nowrap}}  /* narrower bars wrap labels, as before */
+/* the extra chip doesn't fit a 1024px bar beside the decorative glyphs: drop the glyphs */
+.statusbar:has(.needchip) .glyphs{display:none}
+.cbtn.wide.addr{border-style:solid}
+.needchip .dot{background:#f2f8ff;box-shadow:0 0 6px #f2f8ff;animation:pulse 2.2s ease-in-out infinite}
+@media (min-width:1000px) and (min-height:560px){
+  #fleet .askline{font-size:clamp(10px,1.6cqw,17px)}
+  #fleet .askrow .cbtn{font-size:clamp(10px,1.35cqw,15px);padding:clamp(10px,1.7cqw,20px) 6px}
+  #fleet .askclock{font-size:clamp(9px,1.15cqw,13px)}
+}
+.modal.addrmodal{width:min(470px,94%)}
+.addrshow{display:flex;align-items:center;justify-content:center;gap:2px;height:52px;
+  border:1px solid var(--cyan-dim);border-radius:6px;margin-bottom:10px;
+  font-size:24px;letter-spacing:.12em;color:#e6fbff;background:rgba(63,216,255,.04);
+  text-shadow:0 0 10px rgba(63,216,255,.5)}
+.addrshow .cur{display:inline-block;width:2px;height:26px;background:var(--cyan);
+  animation:blink 1s steps(2) infinite;margin-left:2px}
+.addrshow.bad{border-color:#5a4a22}
+.addrhint{font-size:9px;letter-spacing:.18em;color:var(--text-dim);text-align:center;margin:-4px 0 10px;min-height:12px}
+.addrhint.bad{color:var(--amber)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.keypad button{font-family:inherit;font-size:18px;padding:11px 0;border-radius:6px;cursor:pointer;
+  background:rgba(63,216,255,.04);border:1px solid #1c2a4a;color:#bfe9ff}
+.keypad button:active{background:rgba(63,216,255,.14)}
+.keypad .fn{font-size:11px;letter-spacing:.2em;color:var(--text-dim)}
+.remember{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;
+  color:#9fb4d2;margin-bottom:12px;cursor:pointer}
+.remember .box{width:16px;height:16px;border:1px solid var(--cyan-dim);border-radius:3px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan)}
+.result{border-radius:6px;padding:11px 13px;font-size:10.5px;line-height:1.6;margin-bottom:12px;letter-spacing:.06em}
+.result.testing{border:1px solid var(--cyan-dim);color:#bfe9ff}
+.result.ok{border:1px solid #1d6b55;color:var(--ok);background:rgba(87,224,184,.05)}
+.result.warn{border:1px solid #6b5318;color:var(--amber);background:rgba(255,201,77,.04)}
+.result .spin{display:inline-block;width:9px;height:9px;border:2px solid var(--cyan);
+  border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* short screens (the official Pi 7" touchscreen is 800x480): compact dialog */
+@media (max-height:540px){
+  .modal.addrmodal .inner{padding:12px}
+  .modal.addrmodal p{display:none}
+  .addrshow{height:40px;font-size:19px;margin-bottom:6px}
+  .keypad{gap:4px;margin-bottom:8px}
+  .keypad button{padding:6px 0;font-size:15px}
+  .remember{margin-bottom:8px}
+}
+
+
+/* ===== mockup page only (not part of the proposal) ===== */
+html,body{height:auto}
+body{overflow:auto;padding:22px 18px 60px}
+.mk h1{font-size:15px;letter-spacing:.3em;margin-bottom:6px;text-shadow:0 0 8px rgba(63,216,255,.5)}
+.mk .lede{font-size:11px;color:#9fb4d2;line-height:1.7;max-width:980px;margin-bottom:22px}
+.mk code{color:var(--amber)}
+.mk .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+@media (max-width:980px){.mk .row3{grid-template-columns:1fr}}
+.mk .opt{border:1px dashed #1c2a4a;border-radius:12px;padding:12px}
+.mk .opt.rec{border-color:var(--cyan-dim)}
+.mk .lbl{font-size:11px;letter-spacing:.3em;margin-bottom:4px}
+.mk .lbl b{color:var(--amber)}
+.mk .sub{font-size:10px;color:var(--text-dim);letter-spacing:.12em;line-height:1.6;margin-bottom:10px;min-height:48px}
+.mk .fakecam{width:100%;height:190px;border-radius:9px;
+  background:radial-gradient(ellipse at 55% 60%,#26303f 0,#131a26 45%,#06080e 100%)}
+.mk .mini.dhead{border-radius:10px 10px 0 0;background:var(--bezel);border:1px solid var(--bezel-edge);border-bottom:0;padding:8px 10px}
+.mk .mini.dhead{flex-wrap:wrap;row-gap:4px}
+.mk .mini.dhead .dname{font-size:14px;letter-spacing:.14em;overflow:visible;text-overflow:clip;white-space:nowrap}
+.mk .mini.dhead .dstate{flex-basis:100%;margin-left:0;font-size:10px}
+.mk .dcrt.cam{min-height:190px}
+.mk .mini + .dblock{border-top-left-radius:0;border-top-right-radius:0}
+.mk h2{font-size:12px;letter-spacing:.3em;margin:34px 0 10px}
+.mk .notes{font-size:11px;color:#9fb4d2;line-height:1.8;max-width:980px}
+.mk .notes li{margin-left:18px}
+.mk .modalbox{position:relative;display:flex;justify-content:center;padding:18px;border:1px dashed #1c2a4a;border-radius:12px;max-width:520px}
+.mk .modalbox .modal{width:100%}
+
+/* ===== the proposal (would go in static/style.css) ===== */
+.cloudtag{font-size:9px;letter-spacing:.25em;color:var(--text-dim);border:1px solid #1c2a4a;
+  border-radius:3px;padding:2px 6px}
+.cloudnote{grid-column:1/-1;font-size:10px;letter-spacing:.18em;line-height:1.7;
+  color:var(--text-dim);text-align:center;padding:2px 4px 0}
+.cloudnote b{color:#9fb4d2;font-weight:normal}
+.modal .uplnote{font-size:10px;letter-spacing:.15em;line-height:1.7;color:var(--text-dim);margin:-2px 0 12px}
+</style>
+</head>
+<body>
+<div class="mk">
+  <h1>CLOUD-MODE PRINTERS — DETAIL VIEW CONTROLS</h1>
+  <p class="lede">
+    A printer marked <code>"cloud": true</code> in <code>config.json</code> refuses pause, resume,
+    stop and start print from the console (Authorization Control: <code>mqtt message verify
+    failed</code>), so those buttons go. The light works and stays. The fleet panels have no
+    controls and don't change. In both options the header gets a small <b>CLOUD</b> tag beside the
+    model, and a line under the buttons says where those controls live instead.
+    The only difference is what happens to <b>START PRINT…</b>: uploading still works in cloud mode, and an
+    X1C or H2D can start a file from its own screen (Files), so option A keeps an upload-only dialog.
+  </p>
+
+  <div class="row3">
+    <!-- reference: today -->
+    <div class="opt">
+      <div class="lbl">NOW · LAN ONLY + DEVELOPER MODE</div>
+      <div class="sub">Unchanged for printers without <code>"cloud": true</code>.</div>
+      <div class="mini dhead">
+        <span class="lamp printing"></span>
+        <span class="dname nameglow">X1C Panda</span>
+        <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">X1 CARBON</span>
+        <span class="dstate">PRINTING · 41%</span>
+      </div>
+      <div class="dblock">
+        <div class="dcrt cam"><div class="fakecam"></div><span class="camtag rec">LIVE · RTSPS</span></div>
+        <div class="ctrls">
+          <button class="cbtn warn">⏸ PAUSE</button>
+          <button class="cbtn stop">■ STOP</button>
+          <button class="cbtn">☼ LIGHT</button>
+          <button class="cbtn wide" disabled>▲ START PRINT…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- option A -->
+    <div class="opt rec">
+      <div class="lbl"><b>A</b> · LIGHT + UPLOAD TO SD (RECOMMENDED)</div>
+      <div class="sub">Pause / stop / start removed. START PRINT… becomes UPLOAD TO SD…:
+        the same dialog without its START button (below). Stays enabled while printing, since uploading doesn't touch the job.</div>
+      <div class="mini dhead">
+        <span class="lamp printing"></span>
+        <span class="dname nameglow">X1C Lemur</span>
+        <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">X1 CARBON</span>
+        <span class="cloudtag">CLOUD</span>
+        <span class="dstate">PRINTING · 41%</span>
+      </div>
+      <div class="dblock">
+        <div class="dcrt cam"><div class="fakecam"></div><span class="camtag rec">LIVE · RTSPS</span></div>
+        <div class="ctrls">
+          <button class="cbtn" style="grid-column:1/-1">☼ LIGHT</button>
+          <button class="cbtn wide">⇪ UPLOAD TO SD…</button>
+          <div class="cloudnote">CLOUD MODE · <b>PAUSE, STOP AND START</b> FROM THE PRINTER'S
+            SCREEN, BAMBU STUDIO OR HANDY</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- option B -->
+    <div class="opt">
+      <div class="lbl"><b>B</b> · LIGHT ONLY</div>
+      <div class="sub">Everything but the light removed, upload included. Simplest, but drops
+        the upload that does work in cloud mode.</div>
+      <div class="mini dhead">
+        <span class="lamp printing"></span>
+        <span class="dname nameglow">X1C Lemur</span>
+        <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">X1 CARBON</span>
+        <span class="cloudtag">CLOUD</span>
+        <span class="dstate">PRINTING · 41%</span>
+      </div>
+      <div class="dblock">
+        <div class="dcrt cam"><div class="fakecam"></div><span class="camtag rec">LIVE · RTSPS</span></div>
+        <div class="ctrls">
+          <button class="cbtn" style="grid-column:1/-1">☼ LIGHT</button>
+          <div class="cloudnote">CLOUD MODE · <b>PAUSE, STOP AND START</b> FROM THE PRINTER'S
+            SCREEN, BAMBU STUDIO OR HANDY</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>OPTION A · THE UPLOAD DIALOG</h2>
+  <div class="modalbox">
+    <div class="modal cyanline"><div class="inner">
+      <h3>⇪ UPLOAD TO SD — X1C Lemur</h3>
+      <div class="uplnote">THIS PRINTER IS IN CLOUD MODE: START THE FILE FROM ITS SCREEN (FILES),
+        BAMBU STUDIO OR HANDY.</div>
+      <div class="upl">⇪ DROP A SLICED .3MF HERE OR TAP TO UPLOAD</div>
+      <ul class="flist">
+        <li>Benchy plate.3mf<span></span></li>
+        <li>Headphone case (2).3mf<span></span></li>
+      </ul>
+      <div class="row">
+        <button class="cbtn" style="flex:1">CLOSE</button>
+      </div>
+    </div></div>
+  </div>
+
+  <h2>BEHIND THE SCENES (BOTH OPTIONS)</h2>
+  <ul class="notes">
+    <li><code>config.json</code>: <code>"cloud": true</code> on a printer. Missing or false keeps
+      today's controls, so existing configs don't change until you add it.</li>
+    <li>The server refuses pause / resume / stop / start print for a cloud printer before they reach it, and
+      logs why. A stale browser tab or a script can't send them and set off the printer's
+      verification-failed alert.</li>
+    <li>Docs: the Operator Guide's detail-view section and the Admin Guide's config table and
+      cloud-mode notes. The PDF is regenerated.</li>
+  </ul>
+</div>
+</body>
+</html>

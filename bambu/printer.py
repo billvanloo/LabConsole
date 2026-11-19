@@ -19,6 +19,26 @@ REPLY_TIMEOUT = 10.0
 # ("first layer inspection in progress"), so they must never raise the ERROR state.
 _HMS_INFO_LEVELS = {0, 3}
 
+# HMS entries that carry error level but report something other than a fault. Each is
+# shown as a notice (log + "notices"), never as ERROR.
+#   0500_0500_0001_0007  "MQTT command verification failed": raised when a cloud-mode
+#   printer refuses an unsigned command (Authorization Control, firmware 2025+). The
+#   print carries on; treating it as ERROR turned the panel red over a refused pause.
+_HMS_NOT_FAULTS = {(0x05000500, 0x00010007)}
+
+# The reply a cloud-mode printer gives a print-control command it won't take from
+# third-party software (pause/resume/stop/project_file); ledctrl is not affected.
+_AUTH_REFUSED = "mqtt message verify failed"
+
+
+def _is_fault(h):
+    try:
+        if (int(h.get("attr") or 0), int(h.get("code") or 0)) in _HMS_NOT_FAULTS:
+            return False
+    except (TypeError, ValueError):
+        pass
+    return _hms_level(h) not in _HMS_INFO_LEVELS
+
 
 def _hms_level(h):
     try:
@@ -38,6 +58,10 @@ class BambuPrinter:
         self.name = cfg.get("name", cfg["id"])
         self.model = cfg.get("model", "?")
         self.serial = cfg["serial"]
+        # "cloud": true in config.json: the printer stays on Bambu Cloud, whose firmware
+        # refuses print control from the console (see _AUTH_REFUSED), so the console
+        # doesn't offer it. Monitoring, the camera, the light and upload are unaffected.
+        self.cloud = bool(cfg.get("cloud", False))
         self.access_code = str(cfg["access_code"])
         self.ip = cfg.get("ip")  # may be filled/updated by discovery
         self.camera_kind = cfg.get("camera", "rtsp")  # rtsp | chamber | none
@@ -262,6 +286,11 @@ class BambuPrinter:
                       if k in body}
             if result in ("", "success", "ok"):
                 log.info("%s: printer accepted %s (seq %s) %s", self.id, cmd, seq, detail)
+            elif _AUTH_REFUSED in str(body.get("reason", "")).lower():
+                log.warning("%s: printer REJECTED %s (seq %s): %s - this printer is on Bambu "
+                            "Cloud and its firmware only accepts %s signed by Bambu Studio or "
+                            "Handy; use those or the printer's screen (LAN Only + Developer "
+                            "Mode lifts this)", self.id, cmd, seq, detail, cmd)
             else:
                 log.warning("%s: printer REJECTED %s (seq %s): %s", self.id, cmd, seq, detail)
 
@@ -286,8 +315,8 @@ class BambuPrinter:
             r = dict(self._report)
         gs = r.get("gcode_state", "")
         entries = [h for h in (r.get("hms") or []) if isinstance(h, dict)]
-        hms = [h for h in entries if _hms_level(h) not in _HMS_INFO_LEVELS]
-        notices = [h for h in entries if _hms_level(h) == 3]
+        hms = [h for h in entries if _is_fault(h)]
+        notices = [h for h in entries if not _is_fault(h) and _hms_level(h) != 0]
         err = int(r.get("print_error") or 0)
         if not self._online:
             state = "offline"
@@ -325,6 +354,7 @@ class BambuPrinter:
                 })
         return {
             "id": self.id, "name": self.name, "model": self.model,
+            "cloud": self.cloud,
             "ams": ams_trays,
             "camera": self.camera_kind if self.ip else "none",
             "state": state,

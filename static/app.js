@@ -900,16 +900,21 @@ function renderDetail(full) {
         <span class="lamp ${p.state}" id="dlamp"></span>
         <span class="dname nameglow">${esc(p.name)}</span>
         <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">${esc(p.model)}</span>
+        ${p.cloud ? `<span class="cloudtag">CLOUD</span>` : ""}
         <span class="dstate" id="dstate"></span>
       </div>
       <div class="detailgrid">
         <div class="dblock">
           <div class="dcrt cam">${camHtml}</div>
-          <div class="ctrls">
+          <div class="ctrls">${p.cloud ? `
+            <button class="cbtn" id="btn-light" style="grid-column:1/-1">☼ LIGHT</button>
+            <button class="cbtn wide" id="btn-start">⇪ UPLOAD TO SD…</button>
+            <div class="cloudnote">CLOUD MODE · <b>PAUSE, STOP AND START</b> FROM THE PRINTER'S
+              SCREEN, BAMBU STUDIO OR HANDY</div>` : `
             <button class="cbtn warn" id="btn-pause"></button>
             <button class="cbtn stop" id="btn-stop">■ STOP</button>
             <button class="cbtn" id="btn-light">☼ LIGHT</button>
-            <button class="cbtn wide" id="btn-start">▲ START PRINT…</button>
+            <button class="cbtn wide" id="btn-start">▲ START PRINT…</button>`}
           </div>
         </div>
         <div class="dblock"><div class="dcrt" id="telem"></div></div>
@@ -917,16 +922,19 @@ function renderDetail(full) {
       <button class="fleetfab" id="fab" title="Back to the fleet overview (Esc)">▦ FLEET</button>`;
     document.getElementById("back").onclick = closeDetail;
     document.getElementById("fab").onclick = closeDetail;
-    document.getElementById("btn-stop").onclick = () => confirmStop(p.id);
-    document.getElementById("btn-start").onclick = () => startPrintModal(p.id);
     document.getElementById("btn-light").onclick = () => {
       const cur = fleet.find(x => x.id === p.id);
       send({ type: "cmd", id: p.id, action: "light", on: cur?.light !== "on" });
     };
-    document.getElementById("btn-pause").onclick = () => {
-      const cur = fleet.find(x => x.id === p.id);
-      send({ type: "cmd", id: p.id, action: cur?.state === "paused" ? "resume" : "pause" });
-    };
+    // a cloud-mode printer refuses print control from the console, so it has no pause or
+    // stop button (mockups/cloud-controls-mockup.html, option A)
+    if (!p.cloud) {
+      document.getElementById("btn-stop").onclick = () => confirmStop(p.id);
+      document.getElementById("btn-pause").onclick = () => {
+        const cur = fleet.find(x => x.id === p.id);
+        send({ type: "cmd", id: p.id, action: cur?.state === "paused" ? "resume" : "pause" });
+      };
+    }
     mountAnims(elDetail);
   }
   // live-updating parts
@@ -935,13 +943,19 @@ function renderDetail(full) {
   document.getElementById("dstate").textContent =
     stateWord[p.state] + (p.percent != null && (p.state === "printing" || p.state === "paused") ? ` · ${p.percent}%` : "");
   const bp = document.getElementById("btn-pause");
-  bp.textContent = p.state === "paused" ? "▶ RESUME" : "⏸ PAUSE";
-  bp.disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
-  document.getElementById("btn-stop").disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
+  if (bp) {
+    bp.textContent = p.state === "paused" ? "▶ RESUME" : "⏸ PAUSE";
+    bp.disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
+    document.getElementById("btn-stop").disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
+  }
   const bs = document.getElementById("btn-start");
   if (p.state === "offline" && p.address) {
     bs.textContent = "⌨ SET ADDRESS…"; bs.className = "cbtn wide addr"; bs.disabled = false;
     bs.onclick = () => addressModal(p.id);
+  } else if (p.cloud) {
+    // uploading doesn't touch the job, so it stays available while printing
+    bs.textContent = "⇪ UPLOAD TO SD…"; bs.className = "cbtn wide"; bs.disabled = p.state === "offline";
+    bs.onclick = () => startPrintModal(p.id);
   } else {
     bs.textContent = "▲ START PRINT…"; bs.className = "cbtn wide"; bs.disabled = p.state === "printing";
     bs.onclick = () => startPrintModal(p.id);
@@ -1159,22 +1173,28 @@ function confirmStop(id) {
 async function startPrintModal(id) {
   const p = fleet.find(x => x.id === id); if (!p) return;
   closeModal();
+  // A cloud-mode printer refuses start print from the console: the same dialog, upload only
+  // (mockups/cloud-controls-mockup.html, option A).
+  const upOnly = p.cloud;
   const dim = document.createElement("div"); dim.className = "dim";
   dim.innerHTML = `<div class="modal cyanline"><div class="inner">
-    <h3>▲ START PRINT — ${esc(p.name)}</h3>
+    <h3>${upOnly ? "⇪ UPLOAD TO SD" : "▲ START PRINT"} — ${esc(p.name)}</h3>
+    ${upOnly ? `<div class="uplnote">THIS PRINTER IS IN CLOUD MODE: START THE FILE FROM ITS SCREEN (FILES),
+      BAMBU STUDIO OR HANDY.</div>` : ""}
     <div class="upl" id="mm-upl">⇪ DROP A SLICED .3MF HERE OR TAP TO UPLOAD</div>
     <input type="file" id="mm-file" accept=".3mf,.gcode" style="display:none">
     <ul class="flist" id="mm-list"><li class="empty">READING SD CARD…</li></ul>
-    <div class="row">
+    <div class="row">${upOnly ? `
+      <button class="cbtn" style="flex:1" id="mm-cancel">CLOSE</button>` : `
       <button class="cbtn" style="flex:1;border-color:var(--amber);color:var(--amber)" id="mm-go" disabled>START</button>
-      <button class="cbtn" style="flex:1" id="mm-cancel">CANCEL</button>
+      <button class="cbtn" style="flex:1" id="mm-cancel">CANCEL</button>`}
     </div></div></div>`;
   document.body.appendChild(dim); pendingModal = dim;
   const list = dim.querySelector("#mm-list"), go = dim.querySelector("#mm-go"),
         upl = dim.querySelector("#mm-upl"), fileInput = dim.querySelector("#mm-file");
   let selected = null;
   dim.querySelector("#mm-cancel").onclick = closeModal;
-  go.onclick = () => {
+  if (go) go.onclick = () => {
     if (!selected) return;
     send({ type: "cmd", id, action: "start_print", file: selected });
     closeModal(); toast("PRINT COMMAND SENT — " + selected);
@@ -1183,6 +1203,7 @@ async function startPrintModal(id) {
     list.innerHTML = files.length
       ? files.map(f => `<li data-n="${esc(f.name)}">${esc(f.name)}<span>${f.size ? (f.size / 1048576).toFixed(1) + " MB" : ""}</span></li>`).join("")
       : `<li class="empty">NO .3MF / .GCODE FILES ON SD CARD</li>`;
+    if (!go) return;  // upload-only: the list is for reference, there's nothing to arm
     list.querySelectorAll("li[data-n]").forEach(li => li.onclick = () => {
       list.querySelectorAll("li").forEach(x => x.classList.remove("sel"));
       li.classList.add("sel"); selected = li.dataset.n;

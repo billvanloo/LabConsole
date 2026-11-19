@@ -336,6 +336,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["\u25a0 STOP", "Aborts the job. Always asks for confirmation first."],
         ["\u2600 LIGHT", "Toggles the chamber light \u2014 useful before judging a camera view."],
         ["\u25b2 START PRINT\u2026", "Pick a sliced .3mf on the printer\u2019s SD card, or upload one. Selecting a file arms START."],
+        ["UPLOAD TO SD\u2026", "Replaces START PRINT on a printer tagged CLOUD: the same dialog without START. "
+                                "Start the file from the printer\u2019s screen (Files), Bambu Studio or Handy. "
+                                "A CLOUD printer has no PAUSE or STOP either; its firmware refuses them."],
     ], [1.5 * inch, 4.9 * inch])
     e += callout("danger", "\u25b2 CAUTION",
                  "STOP cannot be undone \u2014 a stopped job restarts from zero. The console always "
@@ -368,16 +371,21 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["<b>Cloud mode</b> (stays on Bambu Cloud)",
          "Status, progress, ERROR detection, temperatures, AMS, and the camera. Bambu Studio and "
          "Bambu Handy keep working over the cloud.",
-         "Some controls may be refused: firmware with Bambu\u2019s 2025 authorization change "
-         "rejects certain third-party commands while cloud-connected. A refused command has no effect."],
+         "Print control: firmware with Bambu\u2019s 2025 Authorization Control only accepts "
+         "pause, resume, stop and start print signed by Bambu Studio or Handy, so it refuses "
+         "them from the console. A refused command has no effect. The light still works."],
         ["<b>LAN Only + Developer Mode</b>",
          "Everything, including pause, resume, stop, light, and starting prints.",
          "No Bambu Cloud: no Bambu Handy, and Bambu Studio only from the same local network."],
     ], [1.4 * inch, 2.5 * inch, 2.5 * inch])
     e += [P("Cloud mode is the usual choice in a shared lab where people send prints from their "
-            "own computers. Verified on an X1C: status, the live camera, and the chamber light work "
-            "in cloud mode. Pause, resume, stop, and start print are not yet verified there; test "
-            "them on your own printers before relying on them."),
+            "own computers. Verified on X1C and H2D printers in cloud mode: status, the live "
+            "camera, the chamber light, and file upload work. Pause is refused (\u2018mqtt message "
+            "verify failed\u2019); resume, stop, and start print are the same kind of command and "
+            "are expected to be refused too, so use the printer\u2019s screen, Bambu Studio, or "
+            "Bambu Handy for those, and set \u201ccloud\u201d: true on that printer in config.json so "
+            "the console stops offering them. The HMS 0500_0500_0001_0007 the printer raises on a refusal "
+            "is logged as a notice, not shown as ERROR, since the print carries on."),
           P("Then, on each printer:"),
           LI("Update to recent firmware."),
           LI("<b>LAN Only + Developer Mode only:</b> switch to <b>LAN Only Mode</b> and enable "
@@ -463,6 +471,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["access_code", "LAN access code from the printer screen."],
         ["ip", "Optional; discovery fills it in and follows DHCP changes. A static/reserved address makes startup instant."],
         ["camera", "rtsp (X1-series, H2D) \u00b7 chamber (A1/A1 Mini/P1) \u00b7 none."],
+        ["cloud", "Optional, default false. true for a printer left on Bambu Cloud: the detail view "
+                  "drops pause/stop/start print (the firmware refuses them), offers UPLOAD TO SD "
+                  "instead, and the server refuses those commands. Light, camera and upload are unaffected."],
     ], [1.3 * inch, 5.1 * inch])
     e += [Paragraph("CONFIG REFERENCE \u2014 GLOBAL", S["h3"])]
     e += ref_table(["FIELD", "DEFAULT", "MEANING"], [
@@ -513,7 +524,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
         ["Browser: invalid response or half-loaded pages over the network (localhost works)", "The OS sendfile shortcut cutting replies short, seen on macOS. The console turns it off at startup (AIOHTTP_NOSENDFILE=1); start an older copy with that variable set."],
         ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. If DHCP moved it, the panel asks for the address after 30 s (type it, or AUTO-FIND); unattended, auto-find starts after 2 min. lab-console.log shows each search. A DHCP reservation avoids the gap. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
-        ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
+        ["Pause / stop / light has no effect", "Check the log: \u2018printer REJECTED \u2026 mqtt message verify failed\u2019 (or \u2018no reply\u2019) means a cloud-mode printer whose firmware refuses that command from third-party software \u2014 on current firmware pause, resume, stop and start print, not the light. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
         ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means an older console copy run with a newer ffmpeg; \u2018Option tls_verify not found\u2019 an older copy run with an older ffmpeg (e.g. Raspberry Pi OS). The current console handles both: update it."],
         ["A1 camera ~1 fps", "Hardware rate of the chamber camera; not a fault."],

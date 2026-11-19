@@ -55,9 +55,10 @@ docs change:
 Each printer: recent firmware; note the Access Code and Serial. X1-series/H2D
 additionally need LAN Mode Liveview for cameras.
 
-Printers can stay on Bambu Cloud: status, errors and cameras work, but the
-firmware may refuse some controls (pause/stop/start). For guaranteed full
-control, use LAN Only Mode + Developer Mode instead, which disconnects the
+Printers can stay on Bambu Cloud: status, errors, cameras, the light and file
+upload work, but current firmware refuses pause, resume, stop and start print from
+the console (use the printer's screen, Bambu Studio or Handy); mark those printers
+`"cloud": true` in `config.json` and the console stops offering them. For full control, use LAN Only Mode + Developer Mode instead, which disconnects the
 printer from Bambu Cloud. Either way the console must be able to reach the
 printers directly, so Wi-Fi networks with client isolation won't work. Full
 details in the Admin Guide.

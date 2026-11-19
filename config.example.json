@@ -35,7 +35,8 @@
       "model": "H2D",
       "serial": "00W00B000000000",
       "access_code": "12345678",
-      "camera": "rtsp"
+      "camera": "rtsp",
+      "cloud": true
     },
     {
       "id": "scout03",

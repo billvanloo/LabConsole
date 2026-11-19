@@ -223,6 +223,11 @@ async def ws_handler(request):
     return ws
 
 
+# Print control a cloud-mode printer refuses from third-party software ("cloud": true).
+CLOUD_REFUSED = {"pause": "pause", "resume": "resume", "stop": "stop",
+                 "start_print": "start prints"}
+
+
 async def handle_command(ws, req):
     if req.get("type") != "cmd":
         return
@@ -234,6 +239,11 @@ async def handle_command(ws, req):
     if action == "set_address":
         await set_address(ws, p, req)
         return
+    if p.cloud and action in CLOUD_REFUSED:
+        # The console doesn't offer these for a cloud printer; refuse a stale tab or a
+        # script too, since the printer would only reject it and raise HMS 0500_0500_0001_0007.
+        raise ValueError(f"{p.name} is in cloud mode: {CLOUD_REFUSED[action]} from the "
+                         "printer's screen, Bambu Studio or Handy")
     if action == "pause":
         p.pause()
     elif action == "resume":
