@@ -117,6 +117,18 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
        miss a printer, it is dropped from the subnet scan until it reconnects; SSDP search
        continues. While a printer is offline, <code>/cam/&lt;id&gt;</code> returns
        503 instead of starting a relay against a dead address.</p>
+    <p><b>Asking first (1.8)</b> — with <code>discovery.ask_before_search</code> on (the
+       default), the watchdog doesn&rsquo;t search as soon as a printer has been offline for
+       <code>rediscover_after_s</code>. Instead it moves the printer&rsquo;s
+       <code>address.mode</code> from <code>normal</code> to <code>ask</code>, and the panel
+       offers ENTER ADDRESS / AUTO-FIND. The mode becomes <code>auto</code>, which is the only
+       mode searched, when someone chooses AUTO-FIND, when the startup prompt is declined, or
+       after <code>discovery.ask_timeout_s</code> with no answer. Reconnecting, or any new
+       address, resets it to <code>normal</code>. A typed address is accepted only if
+       <code>probe_address()</code> gets an MQTT login with that printer&rsquo;s access code
+       (<code>ok</code>), as opposed to a listener that refuses it (<code>refused</code>) or
+       none at all (<code>noanswer</code>). It then goes through the same
+       <code>set_ip()</code> path as discovery.</p>
 
     <h2 id="s4"><span class="idx">04</span> WEBSOCKET SCHEMA</h2>
     <p>Browsers connect to <code>/ws</code>. The server pushes the full fleet snapshot
@@ -130,13 +142,25 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
     "nozzle":220, "nozzle_target":220, "bed":65, "bed_target":65,
     "chamber":41, "fan":100, "speed":"STANDARD", "light":"on",
     "ams":[{"type":"PLA","color":"#3fd8ff"},…],
-    "hms":[{"attr":…,"code":…}], "print_error":0 } ] }</code></pre>
+    "hms":[{"attr":…,"code":…}], "print_error":0,
+    "address":{                    // real printers only (absent in demo mode)
+      "mode":"normal",             // normal|ask|auto
+      "ip":"192.168.1.50", "last_ip":"192.168.1.50",
+      "offline_s":0, "ask_left_s":null,   // seconds until auto-find (ask mode)
+      "search":{"next_s":60, "scans":1, "scan_limit":3,
+                "scan_stopped":false, "subnets":["192.168.1.0/24"]} } } ] }</code></pre>
     <p>Client → server commands, acknowledged with <code>{"type":"ack",…}</code> or
        <code>{"type":"error","detail":…}</code>:</p>
     <pre><code>{ "type":"cmd", "id":"voyager01",
-  "action":"pause|resume|stop|light|start_print|refresh",
+  "action":"pause|resume|stop|light|start_print|refresh|auto_find|set_address",
   "on":true,                  // light only
-  "file":"part.3mf" }         // start_print only</code></pre>
+  "file":"part.3mf",          // start_print only
+  "ip":"192.168.1.73",        // set_address only
+  "save":true }               // set_address: also write it to config.json</code></pre>
+    <p><code>set_address</code> answers with its own message once the address has been tested:</p>
+    <pre><code>{ "type":"address_result", "id":"outpost02", "ip":"192.168.1.73",
+  "result":"ok",              // ok|refused|noanswer
+  "saved":true, "save_error":null }</code></pre>
 
     <h2 id="s5"><span class="idx">05</span> HTTP API</h2>
     <table class="ref">

@@ -53,11 +53,20 @@ class BambuPrinter:
         self._client_id = f"labconsole-{self.id}-{secrets.token_hex(3)}"
         self._lock = threading.Lock()
         self._stop = False
+        self._wake = threading.Event()   # set_ip() cuts _run()'s back-off short
         self._pending = {}          # sequence_id -> command name, awaiting a reply
         self._last_problem = None   # dedupes repeated connect failures in the log
         # When the printer last went offline (monotonic), or None while online. Starts set:
         # a printer is offline until its first connect. Read by discovery.Rediscovery.
         self._offline_since = time.monotonic()
+        # Address resolution while offline (driven by discovery.Rediscovery):
+        #   "normal" - connected, or not yet offline long enough to act
+        #   "ask"    - waiting for someone to type an address or choose auto-find
+        #   "auto"   - rediscovery is searching for it
+        self.addr_mode = "normal"
+        self._ask_since = None
+        self.last_ip = self.ip         # last address it was reached at (for the prompt)
+        self.search_info = {}          # filled by Rediscovery for the panel's search line
 
     # ------------------------------------------------- connection
     def start(self):
@@ -73,7 +82,8 @@ class BambuPrinter:
         while not self._stop:
             ip = self.ip
             if not ip:
-                time.sleep(3)  # waiting for discovery to supply an IP
+                self._wake.wait(3)  # waiting for discovery (or a typed address) to supply an IP
+                self._wake.clear()
                 continue
             c = self._make_client()
             self._client = c
@@ -87,7 +97,9 @@ class BambuPrinter:
                 self._close(c)
                 self._set_online(False)
             if self.ip == ip:
-                time.sleep(5)  # failed or dropped at this address: back off
+                # failed or dropped at this address: back off, unless set_ip() moves it
+                self._wake.wait(5)
+                self._wake.clear()
             # else: the address changed, reconnect to the new one straight away
 
     def _make_client(self):
@@ -121,6 +133,36 @@ class BambuPrinter:
     def online(self):
         return self._online
 
+    def ask(self):
+        """Offline long enough: ask a person for an address before searching."""
+        if self.addr_mode == "normal":
+            self.addr_mode, self._ask_since = "ask", time.monotonic()
+            log.info("%s: offline %ds; waiting for an address or auto-find",
+                     self.id, self.offline_for())
+            self.on_change(self)
+
+    def asking_for(self):
+        return 0.0 if self._ask_since is None else time.monotonic() - self._ask_since
+
+    def choose_auto(self, why="chosen"):
+        """Search for the printer (someone tapped AUTO-FIND, declined at startup, or the
+        prompt timed out)."""
+        if self.addr_mode != "auto" and not self._online:
+            self.addr_mode, self._ask_since = "auto", None
+            log.info("%s: auto-discovery (%s)", self.id, why)
+            self.on_change(self)
+
+    ask_timeout_s = 0                  # set by Rediscovery; 0 = wait for a person forever
+
+    def address_view(self):
+        """What the panel needs to show the address prompt / search line."""
+        left = None
+        if self.addr_mode == "ask" and self.ask_timeout_s:
+            left = max(0, round(self.ask_timeout_s - self.asking_for()))
+        return {"mode": self.addr_mode, "ip": self.ip, "last_ip": self.last_ip or self.ip,
+                "offline_s": round(self.offline_for()), "ask_left_s": left,
+                "search": self.search_info}
+
     def offline_for(self):
         """Seconds since the printer went offline (0 while online)."""
         since = self._offline_since
@@ -131,6 +173,9 @@ class BambuPrinter:
         if ip and ip != self.ip:
             log.info("%s: address changed %s -> %s (discovery)", self.id, self.ip, ip)
             self.ip = ip
+            self.search_info = {}
+            self.addr_mode, self._ask_since = "normal", None   # fresh start at the new address
+            self._wake.set()
             if not self._online:
                 self._offline_since = time.monotonic()  # fresh grace period at the new address
             c = self._client
@@ -174,6 +219,9 @@ class BambuPrinter:
         if self._online != val:
             self._online = val
             self._offline_since = None if val else time.monotonic()
+            if val:
+                self.addr_mode, self._ask_since = "normal", None
+                self.last_ip, self.search_info = self.ip, {}
             self.on_change(self)
 
     # ------------------------------------------------- reports
@@ -281,6 +329,7 @@ class BambuPrinter:
             "camera": self.camera_kind if self.ip else "none",
             "state": state,
             "online": self._online,
+            "address": self.address_view(),
             "gcode_state": gs,
             "file": r.get("subtask_name") or r.get("gcode_file") or "",
             "percent": num("mc_percent"),

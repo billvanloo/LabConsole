@@ -25,14 +25,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.7.0), then confirm all 34 files are present:
+Check `VERSION` at the repo root (should read 1.8.0), then confirm all 35 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (34 files):
+Expected file manifest (35 files):
 
 ```
 ./CLAUDE.md
@@ -46,6 +46,7 @@ Expected file manifest (34 files):
 ./build_manual.py
 ./config.example.json
 ./lab-console.service
+./mockups/address-prompt-mockup.html
 ./mockups/detail-view-mockup.html
 ./mockups/fleet-cycle-mockup.html
 ./mockups/fleet-layout-mockup.html
@@ -71,7 +72,7 @@ Expected file manifest (34 files):
 ./static/style.css
 ```
 
-Quick behavioral confirmations that you're on 1.7.0:
+Quick behavioral confirmations that you're on 1.8.0:
 
 ```bash
 grep -n 'DEMO = "--demo"' server.py        # demo mode wired in
@@ -81,6 +82,8 @@ grep -n 'ERROR' static/app.js              # ERROR wording (not "FAULT")
 grep -n 'function layerStack' static/app.js # layer stack face (1.5)
 grep -n 'function progressCube' static/app.js # progress cube face (1.6)
 grep -n 'class Rediscovery' bambu/discovery.py   # rediscovery on lost connection (1.7)
+grep -n 'def startup_addresses' server.py        # startup address check (1.8)
+grep -n 'function addressModal' static/app.js     # panel address prompt (1.8)
 ```
 
 If any of these come back empty, re-obtain the current package before doing any work —
@@ -210,6 +213,23 @@ asyncio.run(main())"
   TLS server speaking enough MQTT 3.1.1 (CONNECT with password check, SUBSCRIBE, PING,
   report PUBLISH). Bind fakes on 127.0.0.x, set `discovery.scan_subnets` to
   `["127.0.0.0/29"]`, kill one and restart it on another 127.0.0.x to simulate DHCP.
+- **Address prompt (1.8)** — asking comes before searching. Each `BambuPrinter` has
+  `addr_mode`: `normal` → `ask` (watchdog, after `rediscover_after_s` offline) → `auto`
+  (AUTO-FIND, a declined startup prompt, or `discovery.ask_timeout_s` unanswered). The
+  watchdog only searches printers in `auto`. Coming online or any `set_ip()` resets to
+  `normal`. `view()["address"]` drives the panel's ask/search faces, which hold the panel
+  (no camera turns) so the button can't vanish mid-tap. A typed address
+  (`set_address` WebSocket command, or the terminal prompt in `startup_addresses()`) is
+  accepted only on `discovery.probe_address() == "ok"` — an MQTT login with that printer's
+  own access code — then goes through `set_ip()`; `save_printer_ip()` rewrites
+  config.json atomically with the original's permissions and keeps `config.json.bak`
+  (gitignored, it holds access codes). The terminal prompt runs only when stdin is a TTY,
+  so systemd boots never block. `set_ip()` also sets `_wake` so `_run()`'s 5 s back-off
+  doesn't delay the reconnect. Approved in `mockups/address-prompt-mockup.html`.
+- **Don't reuse `.dim` as a modifier.** `.dim` is the modal overlay (`position:fixed`,
+  full screen, z-index 50). The NO SIGNAL tag used to be `camtag dim`, which turned it
+  into an invisible full-screen sheet that swallowed every tap in an offline printer's
+  detail view (fixed in 1.8: `camtag nosig`).
 - **DemoPrinter mirrors BambuPrinter's public surface exactly** (`view()`, `pause()`,
   `resume()`, `stop()`, `set_light()`, `start_print()`, `.id`/`.ip`/`.camera_kind`) so
   `server.py` treats real and simulated printers identically. If you add a method to

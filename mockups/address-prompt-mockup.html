@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Address Prompt — Lab Console Mockup</title>
+<style>
+/* ===== repo static/style.css, verbatim ===== */
+:root{
+  --bg:#070b18; --panel-deep:#060d1e;
+  --bezel:#141822; --bezel-edge:#232a38;
+  --cyan:#3fd8ff; --cyan-dim:#1e6c8c; --grid:#1a3a8f;
+  --amber:#ffc94d; --alert:#ff5a2a; --violet:#b06cff;
+  --text-dim:#5f7ea6; --ok:#57e0b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--cyan);
+  font-family:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+  overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;position:relative;
+  /* a display, not a document: no text selection, no I-beam pointer, and no blinking caret
+     (browsers with caret browsing on, F7 in Chrome/Edge, parked one in the first card's
+     text and the detail view's FILE cell; issue #5). Buttons and panels set their own
+     pointer, and nothing in the console takes typed input. */
+  user-select:none;-webkit-user-select:none;caret-color:transparent;cursor:default}
+#app::after{content:"";position:fixed;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;opacity:.5}
+@media (prefers-reduced-motion: reduce){canvas{display:none}}
+
+/* ---------- status bar ---------- */
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+  border-bottom:1px solid #14203d;background:linear-gradient(180deg,#0a1226,#070d1d);
+  font-size:11px;letter-spacing:.2em;flex:0 0 auto}
+.statusbar .title{color:var(--cyan);text-shadow:0 0 8px rgba(63,216,255,.6)}
+.statusbar .glyphs{color:#2a4470;font-size:10px;letter-spacing:.35em}
+.statusbar .spacer{flex:1}
+#chips{display:flex;gap:14px;align-items:center}
+.fleetchip{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.idle{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.dot.print{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.err{background:var(--alert);box-shadow:0 0 6px var(--alert)}
+.dot.off{background:#2a3247}
+.clock{color:var(--amber)}
+.demobadge{border:1px solid var(--violet);color:var(--violet);font-size:9px;
+  letter-spacing:.3em;padding:3px 8px;border-radius:3px;
+  box-shadow:0 0 10px rgba(176,108,255,.3);animation:pulse 2.2s ease-in-out infinite}
+.archlink{font-size:9px;letter-spacing:.25em;color:var(--text-dim);text-decoration:none;
+  border:1px solid #1c2a4a;border-radius:3px;padding:3px 8px}
+.archlink:hover{color:var(--cyan);border-color:var(--cyan-dim)}
+.linkstate{font-size:9px;letter-spacing:.25em;color:var(--ok)}
+.linkstate.down{color:var(--alert);animation:blink 1s steps(2) infinite}
+
+/* ---------- fleet grid ---------- */
+#fleet{flex:1;overflow:auto}
+.grid{display:grid;gap:12px;padding:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.ppanel{position:relative;background:var(--bezel);
+  border:1px solid var(--bezel-edge);border-radius:14px;padding:8px;cursor:pointer}
+.ppanel .crt{position:relative;border-radius:9px;min-height:212px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%, #0c1734 0%, var(--panel-deep) 75%);
+  border:1px solid #0d1526;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;
+  font-size:11px;letter-spacing:.18em}
+.phead .lamp{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lamp.idle{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.lamp.paused{background:var(--violet);box-shadow:0 0 8px var(--violet)}
+.lamp.printing{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 2.2s ease-in-out infinite}
+.lamp.error{background:var(--alert);box-shadow:0 0 10px var(--alert);animation:blink 1s steps(2) infinite}
+.lamp.offline{background:#2a3247}
+@keyframes pulse{50%{opacity:.45}}
+.ppanel.error{animation:bezelflash 1s steps(2) infinite}
+@keyframes bezelflash{
+  0%,100%{border-color:var(--alert);box-shadow:0 0 14px rgba(255,90,42,.55), 0 0 3px rgba(255,90,42,.8) inset}
+  50%{border-color:var(--bezel-edge);box-shadow:none}
+}
+@keyframes blink{50%{opacity:.15}}
+/* The printer's display name (config.json "name"): the state word's typeface and size, in
+   the header above every face so it never moves as faces cycle, with a stronger phosphor glow
+   than anything else on the panel and a faint stepped flicker. Cyan in every state: it is
+   identity, not status, and red stays error-only. Approved as option A of
+   mockups/printer-name-mockup.html. */
+.nameglow{color:#e6fbff;letter-spacing:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  text-shadow:0 0 1px #fff, 0 0 5px rgba(63,216,255,.95), 0 0 12px rgba(63,216,255,.75),
+              0 0 26px rgba(63,216,255,.45), 0 0 44px rgba(63,216,255,.22);
+  animation:phosphor 7s steps(1) infinite}
+@keyframes phosphor{0%{opacity:1}61%{opacity:.84}62%{opacity:1}63%{opacity:.9}64%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.nameglow{animation:none}}
+.phead{gap:10px}
+.phead .lamp{width:12px;height:12px}
+.phead .pname{font-size:15px}
+/* the model label keeps its line when a long name is cut short */
+.phead .pmodel{color:var(--text-dim);font-size:9px;letter-spacing:.25em;margin-left:auto;white-space:nowrap;flex:0 0 auto}
+.pbody{flex:1;position:relative;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.pbody>canvas.bganim{position:absolute;inset:0;width:100%;height:100%}
+.pbody img.camimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.85) contrast(1.05)}
+
+/* Wide, tall screens (a fullscreen lab display): two panels across, and two rows fill
+   the screen, so a 3-4 printer fleet gets about a quarter of the display per panel. A 3rd
+   printer sits bottom-left, keeping the slot a 4th will fill; a 5th+ scrolls to a third
+   row. Type and meters scale with the panel through container units, so the readout
+   carries across the room. Narrow windows and phones keep the auto-fit grid above.
+   Approved in mockups/fleet-layout-mockup.html (option A). */
+@media (min-width:1000px) and (min-height:560px){
+  #fleet{container-type:size}
+  #fleet .grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc((100cqh - 36px) / 2)}
+  #fleet .ppanel{display:flex}
+  #fleet .ppanel .crt{flex:1;min-height:0;container-type:inline-size}
+  #fleet .phead{font-size:clamp(11px,1.45cqw,16px);padding:1.4cqw 1.8cqw 1cqw;gap:1.4cqw}
+  #fleet .phead .pname{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .phead .lamp{width:clamp(12px,1.9cqw,22px);height:clamp(12px,1.9cqw,22px)}
+  #fleet .phead .pmodel{font-size:clamp(9px,1.1cqw,13px)}
+  #fleet .pbody{padding:1.2cqw 2.2cqw 1.8cqw;gap:clamp(7px,1.3cqw,16px)}
+  #fleet .statword{font-size:clamp(15px,3.6cqw,40px)}
+  #fleet .fname{font-size:clamp(11px,2.1cqw,22px)}
+  #fleet .kv,#fleet .errline{font-size:clamp(10px,1.8cqw,19px)}
+  #fleet .progrow{gap:1.6cqw}
+  #fleet .pbar{height:clamp(10px,1.7cqw,18px)}
+  #fleet .ppct{font-size:clamp(12px,2.8cqw,30px)}
+  /* the markup pins the wedge at 34px; wedge() sizes its drawing from the CSS box */
+  #fleet canvas.wedge{width:clamp(34px,6.5cqw,72px)!important;height:clamp(34px,6.5cqw,72px)!important}
+  #fleet .facechip{font-size:clamp(8px,.95cqw,11px);right:1.6cqw;bottom:1.2cqw}
+  #fleet .camtag{font-size:clamp(9px,1.25cqw,14px);left:1.6cqw;top:1.2cqw}
+  #fleet .camfoot{font-size:clamp(9px,1.1cqw,12px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackread{font-size:clamp(9px,1.3cqw,15px);left:1.6cqw;bottom:1.2cqw}
+  #fleet .stackbucket{font-size:clamp(8px,1.1cqw,13px);right:1.6cqw;top:.6cqw}
+
+  /* status faces with progress get a large open-arc reticle beside the readout, filling the
+     band that otherwise sits empty at this size (option C of
+     mockups/large-panel-options-mockup.html). The reticle replaces the small wedge here. */
+  /* The reticle's column has a set width. With "auto", the grid sized it from the canvas's
+     backing store, which fit() makes devicePixelRatio times the CSS size, so on a Retina
+     display the column grew and squeezed the readout into a narrow strip. */
+  #fleet .pbody:has(>canvas.reticle){display:grid;grid-template-columns:minmax(0,1fr) min(40cqw,45%);
+    grid-template-rows:auto auto auto auto 1fr auto;column-gap:3cqw}
+  #fleet .pbody:has(>canvas.reticle)>:is(.statword,.fname,.kv,.errline){grid-column:1}
+  #fleet .pbody>canvas.reticle{display:block;grid-column:2;grid-row:1 / 6;align-self:center;
+    width:100%;aspect-ratio:1;height:auto}
+  #fleet .pbody:has(>canvas.reticle)>.progrow{grid-column:1 / -1;grid-row:6;margin-bottom:clamp(10px,1.6cqw,20px)}
+  #fleet .pbody:has(>canvas.reticle) canvas.wedge{display:none}
+  /* idle faces have no progress to show: center their readout instead */
+  #fleet .pbody:has(>.statword.idle){justify-content:center}
+}
+/* outside the two-across layout the reticle stays hidden and the small wedge does the job */
+canvas.reticle{display:none}
+
+/* Detail view on a wide, tall screen: fill it. The camera takes the left column above
+   larger controls; the readings fill the right column and scale with it (container
+   units), headed by a progress block with the reticle. Narrow windows keep the layout
+   above, without the block. Approved as option B of mockups/detail-view-mockup.html
+   (issue #6). */
+.dprog{display:none}
+@media (min-width:1000px) and (min-height:560px){
+  #detail .dhead{padding:12px 14px}
+  #detail .dstate{font-size:16px;letter-spacing:.3em}
+  #detail .detailgrid{flex:1;min-height:0;grid-template-columns:1.35fr .65fr;grid-template-rows:minmax(0,1fr)}
+  #detail .dblock{display:flex;flex-direction:column;min-height:0}
+  #detail .dcrt.cam{flex:1;min-height:0}
+  #detail .dcrt.cam canvas,#detail .dcrt.cam img{height:100%!important;width:100%}
+  #detail .camtag{font-size:13px;left:14px;top:12px}
+  #detail .ctrls{gap:10px;padding:14px 4px 4px}
+  #detail .cbtn{font-size:15px;padding:20px 8px}
+  /* the right column stops short of the fixed corner FLEET button */
+  #detail .detailgrid>.dblock:last-child{margin-bottom:78px;container-type:inline-size}
+  #telem{flex:1;min-height:0;display:flex;flex-direction:column}
+  #telem .telem{flex:1;grid-auto-rows:1fr}
+  #telem .tcell{padding:1.6cqw 2.4cqw;display:flex;flex-direction:column;justify-content:center}
+  #telem .tcell .tl{font-size:clamp(9px,1.7cqw,14px);margin-bottom:.8cqw}
+  #telem .tcell .tv{font-size:clamp(17px,4.6cqw,42px)}
+  #telem .tcell .tv small{font-size:clamp(10px,2cqw,18px)}
+  #telem .tcell .tv.file{font-size:clamp(11px,2.6cqw,22px)}
+  #telem .tcell.inprog{display:none}
+  /* five readings left below the block: the last spans the row so no slot sits empty */
+  #telem .telem>.tcell:last-child{grid-column:1 / -1}
+  #telem .amslbl{font-size:clamp(9px,1.5cqw,13px);padding:1.6cqw 2.4cqw 0}
+  #telem .ams{padding:1.4cqw 2.4cqw 2cqw;gap:1.4cqw}
+  #telem .slot{font-size:clamp(9px,1.6cqw,14px);padding:1.2cqw 1.4cqw}
+  #telem .slot i{height:clamp(5px,1cqw,9px);margin-bottom:1cqw}
+  #telem .hmsbox{font-size:clamp(10px,2.4cqw,20px);padding:1.6cqw 2.4cqw}
+  /* fixed reticle column, for the same devicePixelRatio reason as the fleet status face */
+  #telem .dprog{display:grid;grid-template-columns:min(34cqw,260px) minmax(0,1fr);gap:2.6cqw;align-items:center;
+    padding:2cqw 2.4cqw;border-bottom:1px solid #101c36;background:var(--panel-deep)}
+  #telem .dprog.noret{grid-template-columns:1fr}
+  #telem .dprog canvas.reticle{display:block;width:100%;aspect-ratio:1;height:auto}
+  #telem .dprog .tl{font-size:clamp(9px,1.7cqw,14px);letter-spacing:.25em;color:var(--text-dim);margin:1.2cqw 0 .5cqw}
+  #telem .dprog .tl:first-child{margin-top:0}
+  #telem .dprog .file{font-size:clamp(11px,2.6cqw,22px);color:#bfe9ff;word-break:break-all;line-height:1.35}
+  #telem .dprog .big{font-size:clamp(20px,6cqw,56px);color:var(--amber)}
+  #telem .dprog .big.vi{color:var(--violet)} #telem .dprog .big.al{color:var(--alert)}
+  #telem .dprog .big.idle{color:var(--cyan)} #telem .dprog .big.offline{color:#3a4a66}
+  #telem .dprog .mid{font-size:clamp(14px,3.6cqw,32px);color:var(--cyan)}
+  #telem .dprog .mid small{font-size:.55em;color:var(--text-dim)}
+}
+
+.statword{font-size:15px;letter-spacing:.35em;margin-top:2px}
+.statword.idle{color:var(--cyan)} .statword.printing,.statword.paused{color:var(--amber)}
+.statword.paused{color:var(--violet)}
+.statword.error{color:var(--alert);text-shadow:0 0 10px rgba(255,90,42,.6)}
+.statword.offline{color:#3a4a66}
+.fname{font-size:11px;color:#bfe9ff;word-break:break-all;line-height:1.4}
+.kv{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);letter-spacing:.12em}
+.kv b{color:var(--cyan);font-weight:400}
+.kv b.warm{color:var(--amber)}
+.errline{font-size:10px;color:#ffb49b;line-height:1.5}
+
+.progrow{display:flex;align-items:center;gap:10px;margin-top:auto}
+.wedge{flex:0 0 auto}
+.pbar{flex:1;height:10px;border:1px solid var(--cyan-dim);border-radius:2px;position:relative;overflow:hidden}
+.pbar>i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--amber) 0 6px,transparent 6px 9px);opacity:.9}
+.pbar.errbar>i{background:repeating-linear-gradient(90deg,var(--alert) 0 6px,transparent 6px 9px)}
+.ppct{font-size:12px;color:var(--amber)}
+
+.facechip{position:absolute;right:10px;bottom:8px;font-size:8px;letter-spacing:.3em;color:#33507c}
+/* layer stack overlays (mockups/layer-stack-mockup.html) */
+.stackread{position:absolute;left:12px;bottom:7px;font-size:9px;color:var(--text-dim);
+  letter-spacing:.15em;z-index:2}
+.stackread b{color:var(--cyan);font-weight:400}
+.stackbucket{position:absolute;right:12px;top:2px;font-size:8px;letter-spacing:.25em;
+  color:var(--amber);z-index:2}
+.camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
+  color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
+.camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
+.camtag.dim{color:var(--text-dim);text-shadow:none}
+.camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
+
+/* ---------- detail view ---------- */
+#detail{flex:1;display:flex;flex-direction:column;overflow:auto}
+.dhead{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12px;
+  letter-spacing:.2em;border-bottom:1px solid #101c36;flex:0 0 auto}
+.dhead .lamp{width:9px;height:9px;border-radius:50%}
+/* the way back to the fleet is lit and sized to find at a glance, plus a corner button in
+   thumb reach on a touch screen; Esc also works (mockups/large-panel-options-mockup.html, D2) */
+.backbtn{font-family:inherit;font-size:13px;letter-spacing:.25em;padding:11px 20px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(63,216,255,.08);border-radius:5px;
+  box-shadow:0 0 12px rgba(63,216,255,.18), 0 0 6px rgba(63,216,255,.12) inset}
+.backbtn:hover{background:rgba(63,216,255,.14)}
+.fleetfab{position:fixed;right:18px;bottom:18px;z-index:20;display:flex;align-items:center;gap:10px;
+  font-family:inherit;font-size:13px;letter-spacing:.3em;padding:16px 24px;border-radius:30px;cursor:pointer;
+  color:var(--cyan);border:1px solid var(--cyan-dim);background:rgba(8,16,34,.92);
+  box-shadow:0 0 18px rgba(63,216,255,.25), 0 6px 20px rgba(0,0,0,.6)}
+.fleetfab:hover{background:rgba(14,26,52,.95)}
+.dstate{margin-left:auto;font-size:11px;color:var(--amber)}
+.dhead .dname{font-size:22px}
+.detailgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;padding:12px}
+@media (max-width:720px){.detailgrid{grid-template-columns:1fr}}
+.dblock{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:14px;padding:8px}
+.dcrt{position:relative;background:var(--panel-deep);border-radius:9px;
+  border:1px solid #0d1526;overflow:hidden}
+.dcrt.cam{min-height:250px;display:flex;align-items:center;justify-content:center}
+.dcrt.cam img{width:100%;height:250px;object-fit:contain;background:#04060c}
+.telem{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#101c36}
+.tcell{background:var(--panel-deep);padding:10px 12px}
+.tcell .tl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);margin-bottom:5px}
+.tcell .tv{font-size:17px;color:var(--cyan)}
+.tcell .tv small{font-size:10px;color:var(--text-dim)}
+.tcell .tv.warm{color:var(--amber)}
+.tcell .tv.file{font-size:11px;line-height:1.5;word-break:break-all}
+.amslbl{font-size:9px;letter-spacing:.25em;color:var(--text-dim);padding:10px 12px 0}
+.ams{display:flex;gap:8px;padding:10px 12px;background:var(--panel-deep)}
+.slot{flex:1;border:1px solid #1c2a4a;border-radius:4px;padding:7px 8px;
+  font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.slot i{display:block;height:5px;border-radius:2px;margin-bottom:6px;background:#2a3247}
+.hmsbox{padding:10px 12px;font-size:10px;color:#ffb49b;line-height:1.6;background:var(--panel-deep)}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.cbtn{font-family:inherit;font-size:11px;letter-spacing:.25em;padding:13px 6px;
+  border-radius:6px;cursor:pointer;background:rgba(63,216,255,.05);
+  border:1px solid var(--cyan-dim);color:var(--cyan)}
+.cbtn:disabled{opacity:.3;cursor:default}
+.cbtn.warn{border-color:#8c5a1e;color:var(--amber);background:rgba(255,201,77,.05)}
+.cbtn.stop{border-color:#8c2c12;color:var(--alert);background:rgba(255,90,42,.06)}
+.cbtn.wide{grid-column:1/-1;border-style:dashed}
+
+/* ---------- modals ---------- */
+.dim{position:fixed;inset:0;background:rgba(2,4,10,.78);display:flex;
+  align-items:center;justify-content:center;z-index:50}
+.modal{width:min(440px,92%);background:var(--bezel);border:1px solid #3a1c12;
+  border-radius:12px;padding:8px;box-shadow:0 0 30px rgba(255,90,42,.15)}
+.modal .inner{border:1px solid #2a1108;border-radius:8px;background:var(--panel-deep);padding:18px}
+.modal h3{font-size:13px;letter-spacing:.3em;color:var(--alert);margin-bottom:10px}
+.modal p{font-size:11px;color:#9fb4d2;line-height:1.6;margin-bottom:16px;word-break:break-word}
+.modal .row{display:flex;gap:8px}
+.modal.cyanline{border-color:#1c2a4a;box-shadow:0 0 30px rgba(63,216,255,.1)}
+.modal.cyanline .inner{border-color:#14203d}
+.modal.cyanline h3{color:var(--cyan)}
+.flist{list-style:none;margin-bottom:14px;border:1px solid #14203d;border-radius:4px;
+  max-height:180px;overflow:auto}
+.flist li{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;
+  font-size:10.5px;border-bottom:1px solid #0e1830;color:#bfe9ff;cursor:pointer}
+.flist li span{color:var(--text-dim)}
+.flist li.sel{background:rgba(63,216,255,.08);outline:1px solid var(--cyan-dim)}
+.flist li.empty{color:var(--text-dim);cursor:default;justify-content:center}
+.upl{border:1px dashed #1c2a4a;border-radius:4px;text-align:center;color:var(--text-dim);
+  font-size:10px;letter-spacing:.2em;padding:12px;margin-bottom:14px;cursor:pointer}
+.upl.busy{color:var(--amber);border-color:#8c5a1e}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:var(--bezel);border:1px solid var(--cyan-dim);color:var(--cyan);
+  font-size:10px;letter-spacing:.2em;padding:9px 16px;border-radius:6px;z-index:60;
+  box-shadow:0 0 18px rgba(63,216,255,.15)}
+.toast.err{border-color:#8c2c12;color:var(--alert)}
+.hidden{display:none !important}
+
+
+/* ===== mockup page chrome (not part of the proposal) ===== */
+html,body{height:auto;overflow:auto}
+body{padding-bottom:40px}
+.mocknav{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 16px;
+  background:#04070f;border-bottom:1px solid #10182b;position:sticky;top:0;z-index:100}
+.mocknav .lbl{font-size:10px;letter-spacing:.28em;color:var(--text-dim);margin-right:10px}
+.mocknav button{background:transparent;border:1px solid #1c2a4a;color:var(--text-dim);
+  font-family:inherit;font-size:10px;letter-spacing:.15em;padding:6px 12px;border-radius:3px;cursor:pointer}
+.mocknav button.on{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(63,216,255,.06)}
+.mockwrap{max-width:1060px;margin:0 auto;padding:16px}
+.mocknote{font-size:12px;line-height:1.7;color:#90a9c8;max-width:82ch;margin:4px 0 14px}
+.mocknote b{color:#d7e6f7}
+.mocknote code{color:var(--amber);font-size:11px}
+.device{background:#02040a;border:1px solid #1b2233;border-radius:14px;padding:10px;
+  box-shadow:0 0 40px rgba(0,0,0,.8)}
+.screen{position:relative;height:600px;border-radius:8px;overflow:hidden;
+  transform:translateZ(0)}  /* makes position:fixed modals stay inside the frame */
+.screen #app{height:100%}
+.mock{display:none}.mock.on{display:block}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:18px}
+.choice{background:var(--bezel);border:1px solid var(--bezel-edge);border-radius:10px;padding:6px}
+.choice .in{background:var(--panel-deep);border:1px solid #0d1526;border-radius:7px;padding:13px 15px;height:100%}
+.choice h3{font-size:10px;letter-spacing:.28em;color:var(--amber);margin-bottom:8px}
+.choice p{font-size:11px;line-height:1.65;color:#9fb4d2;margin-bottom:6px}
+.choice p b{color:#d7e6f7}
+.flow{font-size:11px;line-height:1.9;color:#9fb4d2;background:var(--panel-deep);
+  border:1px solid #14203d;border-radius:8px;padding:14px 18px;margin:10px 0}
+.flow b{color:var(--cyan);font-weight:400}
+.flow i{color:var(--text-dim);font-style:normal}
+
+/* ===== PROPOSED additions to static/style.css ===== */
+/* offline face: address prompt and search status */
+.askline{font-size:10px;color:#9fb4d2;letter-spacing:.1em;line-height:1.55}
+.askline b{color:#e6fbff;font-weight:400}
+.askrow{display:flex;gap:8px;margin-top:auto;position:relative;z-index:2}
+.askrow .cbtn{flex:1;padding:11px 6px}
+.cbtn.addr{border-color:#d7e6f7;color:#f2f8ff;background:rgba(242,248,255,.06)}
+.askclock{font-size:9px;letter-spacing:.18em;color:var(--text-dim);position:relative;z-index:2}
+.askclock b{color:#e6fbff;font-weight:400}
+.searchbox{position:absolute;right:10px;top:4px;width:44%;height:62%;opacity:.55;pointer-events:none}
+.needchip{color:#f2f8ff}
+.needchip .dot{background:#f2f8ff;box-shadow:0 0 6px #f2f8ff;animation:pulse 2.2s ease-in-out infinite}
+@media (min-width:1000px) and (min-height:560px){
+  #fleet .askline{font-size:clamp(10px,1.6cqw,17px)}
+  #fleet .askrow .cbtn{font-size:clamp(10px,1.35cqw,15px);padding:clamp(10px,1.7cqw,20px) 6px}
+  #fleet .askclock{font-size:clamp(9px,1.15cqw,13px)}
+}
+/* address dialog */
+.modal.addrmodal{width:min(470px,94%)}
+.addrshow{display:flex;align-items:center;justify-content:center;gap:2px;height:52px;
+  border:1px solid var(--cyan-dim);border-radius:6px;margin-bottom:10px;
+  font-size:24px;letter-spacing:.12em;color:#e6fbff;background:rgba(63,216,255,.04);
+  text-shadow:0 0 10px rgba(63,216,255,.5)}
+.addrshow .cur{display:inline-block;width:2px;height:26px;background:var(--cyan);
+  animation:blink 1s steps(2) infinite;margin-left:2px}
+.addrshow.bad{border-color:#5a4a22}
+.addrhint{font-size:9px;letter-spacing:.18em;color:var(--text-dim);text-align:center;margin:-4px 0 10px;min-height:12px}
+.addrhint.bad{color:var(--amber)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.keypad button{font-family:inherit;font-size:18px;padding:11px 0;border-radius:6px;cursor:pointer;
+  background:rgba(63,216,255,.04);border:1px solid #1c2a4a;color:#bfe9ff}
+.keypad button:active{background:rgba(63,216,255,.14)}
+.keypad .fn{font-size:11px;letter-spacing:.2em;color:var(--text-dim)}
+.remember{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;
+  color:#9fb4d2;margin-bottom:12px;cursor:pointer}
+.remember .box{width:16px;height:16px;border:1px solid var(--cyan-dim);border-radius:3px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan)}
+.result{border-radius:6px;padding:11px 13px;font-size:10.5px;line-height:1.6;margin-bottom:12px;letter-spacing:.06em}
+.result.testing{border:1px solid var(--cyan-dim);color:#bfe9ff}
+.result.ok{border:1px solid #1d6b55;color:var(--ok);background:rgba(87,224,184,.05)}
+.result.warn{border:1px solid #6b5318;color:var(--amber);background:rgba(255,201,77,.04)}
+.result .spin{display:inline-block;width:9px;height:9px;border:2px solid var(--cyan);
+  border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* short screens (the official Pi 7" touchscreen is 800x480): compact dialog */
+@media (max-height:540px){
+  .modal.addrmodal .inner{padding:12px}
+  .modal.addrmodal p{display:none}
+  .addrshow{height:40px;font-size:19px;margin-bottom:6px}
+  .keypad{gap:4px;margin-bottom:8px}
+  .keypad button{padding:6px 0;font-size:15px}
+  .remember{margin-bottom:8px}
+}
+</style>
+</head>
+<body>
+
+<nav class="mocknav">
+  <span class="lbl">ADDRESS PROMPT — MOCKUP</span>
+  <button data-m="m1" class="on">01 · FLEET</button>
+  <button data-m="m2">02 · ENTER ADDRESS</button>
+  <button data-m="m3">03 · DETAIL VIEW</button>
+  <button data-m="m4">04 · FLOW + CHOICES</button>
+</nav>
+
+<!-- ================= 01 FLEET ================= -->
+<section class="mock on mockwrap" id="m1">
+  <p class="mocknote">When a printer has been unreachable for 30 seconds, its panel
+    <b>stops cycling and asks</b>. OUTPOST-02 shows the question. SCOUT-03 shows what happens after
+    someone taps <b>AUTO-FIND</b>, or after the countdown runs out with nobody around: the
+    console searches, and the panel still offers <b>ENTER ADDRESS</b>. A white
+    <b>NEEDS ADDRESS</b> chip in the status bar flags it fleet-wide. White is used because this is an
+    indicator, not an alarm; red stays reserved for errors. <b>Tap ENTER ADDRESS</b> on either panel.</p>
+  <div class="device"><div class="screen"><div id="app">
+    <div class="statusbar">
+      <span class="title">LAB CONSOLE</span>
+      <span class="glyphs">⌌⍚⌏ ⍙⌇⍜ ⌈⍑⌋</span>
+      <span class="spacer"></span>
+      <span id="chips" style="display:flex;gap:14px;align-items:center">
+        <span class="fleetchip"><span class="dot print"></span>1 PRINTING</span>
+        <span class="fleetchip"><span class="dot off"></span>2 OFFLINE</span>
+        <span class="fleetchip needchip"><span class="dot"></span>1 NEEDS ADDRESS</span>
+      </span>
+      <a class="archlink">⌘ ARCHIVE</a>
+      <span class="linkstate">LINK OK</span>
+      <span class="clock" data-clock>--:--:--</span>
+    </div>
+    <div id="fleet"><div class="grid">
+      <!-- printing, unchanged -->
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp printing"></span><span class="pname nameglow">VOYAGER-01</span><span class="pmodel">X1 CARBON</span></div>
+        <div class="pbody">
+          <div class="statword printing">PRINTING</div>
+          <div class="fname">sensor_mount_bracket_v3.3mf</div>
+          <div class="kv"><span>LAYER</span><b>143 / 230</b></div>
+          <div class="kv"><span>TIME LEFT</span><b class="warm">1H 47M</b></div>
+          <div class="progrow"><div class="pbar"><i style="width:62%"></i></div><span class="ppct">62%</span></div>
+          <span class="facechip">STATUS</span>
+        </div></div></div>
+      <!-- NEW: asking -->
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp offline"></span><span class="pname nameglow">OUTPOST-02</span><span class="pmodel">H2D</span></div>
+        <div class="pbody">
+          <div class="statword offline">OFFLINE</div>
+          <div class="askline">NO ANSWER AT <b>192.168.1.50</b> FOR <b data-up="42">0:42</b><br>
+            ITS ADDRESS MAY HAVE CHANGED.</div>
+          <div class="askrow">
+            <button class="cbtn addr" data-open="outpost">⌨ ENTER ADDRESS</button>
+            <button class="cbtn">⌖ AUTO-FIND</button>
+          </div>
+          <div class="askclock">AUTO-FIND STARTS IN <b data-down="78">1:18</b> IF NOBODY ANSWERS</div>
+        </div></div></div>
+      <!-- NEW: searching -->
+      <div class="ppanel"><div class="crt">
+        <div class="phead"><span class="lamp offline"></span><span class="pname nameglow">SCOUT-03</span><span class="pmodel">A1 MINI</span></div>
+        <div class="pbody">
+          <canvas class="searchbox" data-anim="radar"></canvas>
+          <div class="statword offline">OFFLINE</div>
+          <div class="askline"><b>SEARCHING THE NETWORK…</b><br>
+            SSDP SEARCH, THEN SCAN OF 192.168.1.0/24<br>LAST SEEN AT 192.168.1.52</div>
+          <div class="askrow">
+            <button class="cbtn addr" data-open="scout">⌨ ENTER ADDRESS</button>
+          </div>
+          <div class="askclock">SEARCH 2 OF 3 · NEXT IN <b data-down="54">0:54</b></div>
+        </div></div></div>
+    </div></div>
+  </div></div></div>
+</section>
+
+<!-- ================= 02 ENTER ADDRESS ================= -->
+<section class="mock mockwrap" id="m2">
+  <p class="mocknote">The dialog is interactive. Type with the keypad, or with a keyboard if one
+    is attached, and tap <b>CONNECT</b>. The console tests the address before accepting it by
+    logging in with <b>this printer's own access code</b>, so a typo can't point it at the wrong
+    printer. Simulated outcomes:
+    <code>192.168.1.73</code> connects;
+    <code>192.168.1.80</code> is a different printer;
+    any other valid address has nothing answering.</p>
+  <div class="device"><div class="screen" id="m2screen"><div id="app">
+    <div class="statusbar"><span class="title">LAB CONSOLE</span><span class="spacer"></span>
+      <span class="fleetchip needchip"><span class="dot"></span>1 NEEDS ADDRESS</span>
+      <span class="clock" data-clock>--:--:--</span></div>
+    <div style="flex:1"></div>
+  </div></div></div>
+</section>
+
+<!-- ================= 03 DETAIL ================= -->
+<section class="mock mockwrap" id="m3">
+  <p class="mocknote">For an offline printer, the detail view adds <b>SET ADDRESS…</b>, which
+    opens the same dialog. It's there any time, not only while the panel is asking, so the
+    address can be corrected even after auto-find has given up. The repo's detail layout is
+    otherwise unchanged. This is a simplified frame showing the control row only.</p>
+  <div class="device"><div class="screen"><div id="app">
+    <div class="dhead">
+      <button class="backbtn">◂ FLEET</button>
+      <span class="lamp offline" style="width:9px;height:9px;border-radius:50%;background:#2a3247"></span>
+      <span class="nameglow" style="font-size:15px">OUTPOST-02</span>
+      <span style="color:var(--text-dim);font-size:9px;letter-spacing:.25em">H2D</span>
+      <span class="dstate" style="margin-left:auto;color:var(--text-dim)">OFFLINE · LAST SEEN 192.168.1.50</span>
+    </div>
+    <div style="padding:14px;display:grid;grid-template-columns:1.15fr .85fr;gap:12px;flex:1">
+      <div class="dblock" style="display:flex;flex-direction:column">
+        <div class="dcrt" style="flex:1;min-height:220px;display:flex;align-items:center;justify-content:center">
+          <span class="camtag dim" style="position:static">NO SIGNAL</span></div>
+        <div class="ctrls">
+          <button class="cbtn warn" disabled>⏸ PAUSE</button>
+          <button class="cbtn stop" disabled>■ STOP</button>
+          <button class="cbtn" disabled>☼ LIGHT</button>
+          <button class="cbtn addr wide" data-open="outpost" style="border-style:solid">⌨ SET ADDRESS…</button>
+        </div>
+      </div>
+      <div class="dblock"><div class="dcrt" style="padding:14px">
+        <div class="askline" style="font-size:11px">NO ANSWER AT <b>192.168.1.50</b> FOR <b>1:12</b>.<br><br>
+          TAP <b>SET ADDRESS…</b> TO TYPE THE PRINTER'S CURRENT ADDRESS. IT'S ON THE PRINTER'S
+          SCREEN UNDER SETTINGS → NETWORK.</div>
+      </div></div>
+    </div>
+  </div></div></div>
+</section>
+
+<!-- ================= 04 FLOW ================= -->
+<section class="mock mockwrap" id="m4">
+  <p class="mocknote">Where this fits relative to v1.7 rediscovery, plus three choices for you.</p>
+  <div class="flow">
+    <b>1</b> CONNECTION DROPS <i>— paho retries the same address on its own (unchanged)</i><br>
+    <b>2</b> STILL DOWN AFTER 30 S (<code>discovery.rediscover_after_s</code>) → panel <b>ASKS</b>: ENTER ADDRESS / AUTO-FIND<br>
+    &nbsp;&nbsp;&nbsp;<i>· an SSDP announcement can still arrive in the meantime and fix it silently</i><br>
+    <b>3a</b> ENTER ADDRESS → console tests it (MQTT login with the access code) → on success, reconnects and saves it<br>
+    <b>3b</b> AUTO-FIND tapped, or nobody answers in 2 min → v1.7 rediscovery runs unchanged (SSDP search → subnet scan, max 3 empty scans)<br>
+    <b>4</b> ENTER ADDRESS / SET ADDRESS… stays available the whole time
+  </div>
+  <div class="choices">
+    <div class="choice"><div class="in">
+      <h3>CHOICE 1 · IF NOBODY ANSWERS</h3>
+      <p><b>Recommended: auto-find after 2 minutes.</b> The wall display is often unattended
+        overnight or over a weekend. A printer whose lease renews at 2 a.m. would otherwise sit
+        offline until someone walks by.</p>
+      <p>Alternative: wait indefinitely for a person. Auto-discovery then runs only when someone
+        taps AUTO-FIND. The countdown line disappears.</p>
+    </div></div>
+    <div class="choice"><div class="in">
+      <h3>CHOICE 2 · REMEMBER THE ADDRESS</h3>
+      <p><b>Recommended: write it into <code>config.json</code></b> (that printer's
+        <code>ip</code>), keeping a <code>config.json.bak</code>. A restart then uses the new
+        address. A checkbox in the dialog, default on, allows a one-off.</p>
+      <p>Alternative: this session only. A restart reverts to the old address.</p>
+    </div></div>
+    <div class="choice"><div class="in">
+      <h3>CHOICE 3 · AT STARTUP</h3>
+      <p><b>Recommended: same rule.</b> A printer listed with no <code>ip</code> (or a stale
+        one) that hasn't connected 30 s after startup gets the same prompt. The auto-find countdown
+        still applies, so a printer with no <code>ip</code> is found on its own as today.</p>
+      <p>Alternative: prompt only after a printer that <i>was</i> connected drops, and keep
+        today's behavior at startup.</p>
+    </div></div>
+    <div class="choice"><div class="in">
+      <h3>NO DECISION NEEDED</h3>
+      <p>Address entry goes through <code>set_ip()</code>, the same path as discovery, so
+        <code>_run()</code> stays the only place a client is created. The test login means an
+        address can only be accepted if the printer there knows this printer's access code.
+        The console has no login, so anyone on the LAN could open the dialog, but they
+        couldn't point a panel at a non-printer. Demo printers get a simulated dialog.</p>
+    </div></div>
+  </div>
+</section>
+
+<script>
+"use strict";
+const CY = "#3fd8ff", AM = "#ffc94d", AL = "#ff5a2a", GR = "#1a3a8f";
+/* ---- canvas helpers + radar: verbatim from repo static/app.js ---- */
+function fit(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio;
+  const c = cv.getContext("2d"); c.scale(devicePixelRatio, devicePixelRatio);
+  return [c, r.width, r.height];
+}
+function loop(cv, draw) { (function f() { if (!cv.isConnected) return; draw(); requestAnimationFrame(f); })(); }
+
+
+function radar(cv) {
+  const [c, w, h] = fit(cv); if (w < 10 || h < 10) return;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14; let a = 0;
+  loop(cv, () => {
+    c.clearRect(0, 0, w, h); c.lineWidth = 1;
+    c.strokeStyle = GR;
+    for (let i = 1; i <= 3; i++) { c.beginPath(); c.arc(cx, cy, R * i / 3, 0, 7); c.stroke(); }
+    c.strokeStyle = CY; c.globalAlpha = .9; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R);
+    c.globalAlpha = .35; c.stroke(); c.globalAlpha = 1;
+    if (c.createConicGradient) {
+      // The sweep turns clockwise (a grows), and a conic gradient also runs clockwise from
+      // its start angle, so start it a twelfth of a turn BEHIND the line and brighten up to
+      // it: the glow trails the sweep instead of running ahead of it (issue #4).
+      const TRAIL = .12, g = c.createConicGradient(a - TRAIL * 2 * Math.PI, cx, cy);
+      g.addColorStop(0, "rgba(63,216,255,0)"); g.addColorStop(TRAIL, "rgba(63,216,255,.35)");
+      g.addColorStop(TRAIL + .001, "rgba(63,216,255,0)"); g.addColorStop(1, "rgba(63,216,255,0)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, 0, 7); c.fill();
+    }
+    c.strokeStyle = CY; c.beginPath(); c.moveTo(cx, cy);
+    c.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); c.stroke();
+    [[.6, 1.2], [.35, 3.9], [.82, 5.1]].forEach(([rr, aa], i) => {
+      const bl = (Math.sin(Date.now() / 500 + i * 2) + 1) / 2;
+      c.fillStyle = i === 1 ? AL : AM; c.globalAlpha = .3 + bl * .7;
+      c.beginPath(); c.arc(cx + R * rr * Math.cos(aa), cy + R * rr * Math.sin(aa), 2.5, 0, 7); c.fill();
+      c.globalAlpha = 1;
+    });
+    a += 0.02;
+  });
+}
+
+
+/* ---- nav ---- */
+document.querySelectorAll(".mocknav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".mocknav button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".mock").forEach(m => m.classList.toggle("on", m.id === b.dataset.m));
+  if (b.dataset.m === "m2" && !document.querySelector("#m2screen .dim")) openAddr("outpost", document.getElementById("m2screen"));
+  mount();
+});
+function mount() {
+  document.querySelectorAll(".mock.on canvas[data-anim=radar]").forEach(cv => {
+    if (!cv.dataset.live) { const r = cv.getBoundingClientRect(); if (r.width > 10) { cv.dataset.live = 1; radar(cv); } }
+  });
+}
+const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+setInterval(() => {
+  document.querySelectorAll("[data-clock]").forEach(e => e.textContent = new Date().toTimeString().slice(0, 8));
+  document.querySelectorAll("[data-up]").forEach(e => { e.dataset.up++; e.textContent = mmss(+e.dataset.up); });
+  document.querySelectorAll("[data-down]").forEach(e => { e.dataset.down = Math.max(0, e.dataset.down - 1); e.textContent = mmss(+e.dataset.down); });
+}, 1000);
+
+/* ---- address dialog ---- */
+const PRINTERS = {
+  outpost: { name: "OUTPOST-02", last: "192.168.1.50" },
+  scout:   { name: "SCOUT-03",   last: "192.168.1.52" },
+};
+const validIp = s => /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(s);
+function openAddr(which, host) {
+  host = host || document.querySelector(".mock.on .screen");
+  host.querySelector(".dim")?.remove();
+  const p = PRINTERS[which];
+  let addr = p.last.replace(/\d+$/, ""), remember = true, busy = false;
+  const dim = document.createElement("div"); dim.className = "dim";
+  dim.innerHTML = `<div class="modal cyanline addrmodal"><div class="inner">
+    <h3>⌨ SET ADDRESS — ${p.name}</h3>
+    <p>${p.name} stopped answering at <span style="color:#bfe9ff">${p.last}</span>. Type its
+      current address. It's on the printer's screen under Settings → Network. Or let the console search for it.</p>
+    <div class="addrshow" id="as"></div>
+    <div class="addrhint" id="ah"></div>
+    <div class="keypad">${[1,2,3,4,5,6,7,8,9].map(n => `<button data-k="${n}">${n}</button>`).join("")}
+      <button data-k=".">.</button><button data-k="0">0</button><button data-k="bs" class="fn">⌫</button></div>
+    <div class="remember" id="rm"><span class="box">✓</span>SAVE TO CONFIG.JSON</div>
+    <div id="res"></div>
+    <div class="row">
+      <button class="cbtn" style="flex:1.2;border-color:#d7e6f7;color:#f2f8ff" id="go">CONNECT</button>
+      <button class="cbtn" style="flex:1" id="af">⌖ AUTO-FIND</button>
+      <button class="cbtn" style="flex:.8;color:var(--text-dim);border-color:#1c2a4a" id="later">LATER</button>
+    </div></div></div>`;
+  host.appendChild(dim);
+  const $ = s => dim.querySelector(s);
+  function draw() {
+    $("#as").innerHTML = (addr || '<span style="color:#33507c">0.0.0.0</span>') + '<span class="cur"></span>';
+    const ok = validIp(addr), parts = addr.split(".");
+    const tooBig = parts.some(x => x !== "" && +x > 255);
+    $("#as").classList.toggle("bad", tooBig);
+    $("#ah").className = "addrhint" + (tooBig ? " bad" : "");
+    $("#ah").textContent = tooBig ? "EACH PART MUST BE 0–255" : ok ? "" : "FOUR NUMBERS SEPARATED BY DOTS";
+    $("#go").disabled = !ok || busy;
+  }
+  function key(k) {
+    if (busy) return;
+    if (k === "bs") addr = addr.slice(0, -1);
+    else if (k === ".") { if (addr && !addr.endsWith(".") && addr.split(".").length < 4) addr += "."; }
+    else { const last = addr.split(".").pop(); if (last.length < 3 && addr.length < 15) addr += k; }
+    $("#res").innerHTML = ""; draw();
+  }
+  dim.querySelectorAll("[data-k]").forEach(b => b.onclick = () => key(b.dataset.k));
+  // Consume the keys the dialog handles: otherwise Enter also "clicks" whatever button
+  // still has focus (the panel's ENTER ADDRESS button), reopening a fresh dialog.
+  document.activeElement?.blur?.();
+  const onKey = e => {
+    if (!dim.isConnected) return document.removeEventListener("keydown", onKey);
+    if (/^[0-9.]$/.test(e.key)) key(e.key);
+    else if (e.key === "Backspace") key("bs");
+    else if (e.key === "Enter") { if (!$("#go").disabled) $("#go").click(); }
+    else if (e.key === "Escape") $("#later").click();
+    else return;
+    e.preventDefault();
+  };
+  document.addEventListener("keydown", onKey);
+  $("#rm").onclick = () => { remember = !remember; $("#rm .box").textContent = remember ? "✓" : ""; };
+  $("#later").onclick = () => dim.remove();
+  $("#af").onclick = () => { $("#res").innerHTML = `<div class="result testing"><span class="spin"></span>SEARCHING THE NETWORK FOR ${p.name}…</div>`; };
+  $("#go").onclick = () => {
+    busy = true; draw();
+    $("#res").innerHTML = `<div class="result testing"><span class="spin"></span>TESTING ${addr} — LOGGING IN WITH ${p.name}'S ACCESS CODE…</div>`;
+    setTimeout(() => {
+      busy = false;
+      if (addr === "192.168.1.73") {
+        $("#res").innerHTML = `<div class="result ok">✓ CONNECTED — ${p.name} IS AT ${addr}.${remember ? " SAVED TO CONFIG.JSON." : " THIS SESSION ONLY."}</div>`;
+        setTimeout(() => dim.remove(), 1800);
+      } else if (addr === "192.168.1.80") {
+        $("#res").innerHTML = `<div class="result warn">A PRINTER ANSWERED AT ${addr}, BUT IT ISN'T ${p.name} — IT REFUSED THIS PRINTER'S ACCESS CODE. CHECK THE ADDRESS ON ${p.name}'S OWN SCREEN.</div>`;
+      } else {
+        $("#res").innerHTML = `<div class="result warn">NOTHING ANSWERED AT ${addr}. CHECK THE NUMBER, OR TRY AUTO-FIND.</div>`;
+      }
+      draw();
+    }, 1600);
+  };
+  draw();
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) { e.stopPropagation(); openAddr(b.dataset.open); } });
+mount();
+</script>
+</body>
+</html>

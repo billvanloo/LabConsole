@@ -196,6 +196,15 @@ def mqtt_login_ok(ip, access_code, timeout=4):
     return bool(ok and ok[0])
 
 
+def probe_address(ip, access_code):
+    """Test a typed-in address for one printer: "ok" (that printer is there), "refused"
+    (something answers on 8883 but rejects this printer's access code, i.e. a different
+    printer or a stale code), or "noanswer"."""
+    if not _port_open(ip, timeout=3):
+        return "noanswer"
+    return "ok" if mqtt_login_ok(ip, access_code) else "refused"
+
+
 def subnet_scan(wanted, subnets, skip=()):
     """wanted: {serial: access_code}. Returns {serial: (ip, how)} for printers identified."""
     hosts = []
@@ -246,7 +255,8 @@ class Rediscovery:
     POLL_S = 5
 
     def __init__(self, printers, on_found, rediscover_after_s=30, subnet_scan=True,
-                 scan_subnets=None, min_interval_s=60, max_empty_scans=3):
+                 scan_subnets=None, min_interval_s=60, max_empty_scans=3,
+                 ask_before_search=True, ask_timeout_s=120):
         self.printers = printers            # {id: BambuPrinter}
         self.on_found = on_found            # on_found(serial, ip), same as the listener's
         self.grace = rediscover_after_s
@@ -255,6 +265,12 @@ class Rediscovery:
         self.min_interval_s = min_interval_s
         self.max_empty_scans = max_empty_scans  # 0 = no limit
         self._empty_scans = {}              # printer id -> scans in a row that missed it
+        # Before searching, ask a person for the address (panel prompt). If nobody answers
+        # within ask_timeout_s (0 = wait forever), search anyway.
+        self.ask_before_search = ask_before_search
+        self.ask_timeout_s = ask_timeout_s
+        for p in printers.values():
+            p.ask_timeout_s = ask_timeout_s
         self._interval = min_interval_s
         self._last_pass = -1e9
         threading.Thread(target=self._run, name="rediscovery", daemon=True).start()
@@ -265,8 +281,16 @@ class Rediscovery:
             for p in self.printers.values():
                 if p.online:
                     self._empty_scans.pop(p.id, None)
+                elif p.addr_mode == "normal" and p.offline_for() >= self.grace:
+                    if self.ask_before_search:
+                        p.ask()
+                    else:
+                        p.choose_auto("discovery.ask_before_search is off")
+                elif (p.addr_mode == "ask" and self.ask_timeout_s
+                      and p.asking_for() >= self.ask_timeout_s):
+                    p.choose_auto(f"nobody answered the prompt in {self.ask_timeout_s:.0f}s")
             lost = [p for p in self.printers.values()
-                    if not p.online and p.offline_for() >= self.grace]
+                    if not p.online and p.addr_mode == "auto"]
             if not lost:
                 self._interval = self.min_interval_s
                 continue
@@ -310,6 +334,15 @@ class Rediscovery:
             self._interval = self.min_interval_s
         for p in missing.values():
             log.info("rediscovery: %s not found; next try in %ds", p.id, self._interval)
+            subnets = self.scan_subnets or local_subnets()
+            p.search_info = {
+                "next_s": round(self._interval),
+                "scans": self._empty_scans.get(p.id, 0),
+                "scan_limit": self.max_empty_scans if self.do_scan else 0,
+                "scan_stopped": self.do_scan and not self._may_scan(p),
+                "subnets": subnets if self.do_scan else [],
+            }
+            p.on_change(p)
 
     def _may_scan(self, p):
         return not self.max_empty_scans or self._empty_scans.get(p.id, 0) < self.max_empty_scans

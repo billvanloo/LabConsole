@@ -214,7 +214,9 @@ canvas.reticle{display:none}
 .camtag{position:absolute;left:10px;top:8px;font-size:9px;letter-spacing:.25em;
   color:#f2f8ff;text-shadow:0 0 6px rgba(242,248,255,.75);z-index:2}
 .camtag.rec::before{content:"● ";animation:blink 1.4s steps(2) infinite}
-.camtag.dim{color:var(--text-dim);text-shadow:none}
+/* not ".dim": that's the modal overlay (position:fixed, full screen, z-index 50), and sharing
+   the name turned this tag into an invisible sheet that swallowed every tap */
+.camtag.nosig{color:var(--text-dim);text-shadow:none}
 .camfoot{position:absolute;left:10px;bottom:8px;font-size:9px;color:var(--text-dim);letter-spacing:.15em;z-index:2}
 
 /* ---------- detail view ---------- */
@@ -292,3 +294,60 @@ canvas.reticle{display:none}
   box-shadow:0 0 18px rgba(63,216,255,.15)}
 .toast.err{border-color:#8c2c12;color:var(--alert)}
 .hidden{display:none !important}
+
+/* ---------- lost printers: address prompt + search (v1.8, mockups/address-prompt-mockup.html) ---------- */
+.askline{font-size:10px;color:#9fb4d2;letter-spacing:.1em;line-height:1.55}
+.askline b{color:#e6fbff;font-weight:400}
+.askrow{display:flex;gap:8px;margin-top:auto;position:relative;z-index:2}
+.askrow .cbtn{flex:1;padding:11px 6px}
+.cbtn.addr{border-color:#d7e6f7;color:#f2f8ff;background:rgba(242,248,255,.06)}
+.cbtn.later{color:var(--text-dim);border-color:#1c2a4a}
+.askclock{font-size:9px;letter-spacing:.18em;color:var(--text-dim);position:relative;z-index:2}
+.askclock b{color:#e6fbff;font-weight:400}
+.searchbox{position:absolute;right:10px;top:4px;width:44%;height:62%;opacity:.55;pointer-events:none}
+.needchip{color:#f2f8ff}
+@media (min-width:1000px){.fleetchip{white-space:nowrap}}  /* narrower bars wrap labels, as before */
+/* the extra chip doesn't fit a 1024px bar beside the decorative glyphs: drop the glyphs */
+.statusbar:has(.needchip) .glyphs{display:none}
+.cbtn.wide.addr{border-style:solid}
+.needchip .dot{background:#f2f8ff;box-shadow:0 0 6px #f2f8ff;animation:pulse 2.2s ease-in-out infinite}
+@media (min-width:1000px) and (min-height:560px){
+  #fleet .askline{font-size:clamp(10px,1.6cqw,17px)}
+  #fleet .askrow .cbtn{font-size:clamp(10px,1.35cqw,15px);padding:clamp(10px,1.7cqw,20px) 6px}
+  #fleet .askclock{font-size:clamp(9px,1.15cqw,13px)}
+}
+.modal.addrmodal{width:min(470px,94%)}
+.addrshow{display:flex;align-items:center;justify-content:center;gap:2px;height:52px;
+  border:1px solid var(--cyan-dim);border-radius:6px;margin-bottom:10px;
+  font-size:24px;letter-spacing:.12em;color:#e6fbff;background:rgba(63,216,255,.04);
+  text-shadow:0 0 10px rgba(63,216,255,.5)}
+.addrshow .cur{display:inline-block;width:2px;height:26px;background:var(--cyan);
+  animation:blink 1s steps(2) infinite;margin-left:2px}
+.addrshow.bad{border-color:#5a4a22}
+.addrhint{font-size:9px;letter-spacing:.18em;color:var(--text-dim);text-align:center;margin:-4px 0 10px;min-height:12px}
+.addrhint.bad{color:var(--amber)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.keypad button{font-family:inherit;font-size:18px;padding:11px 0;border-radius:6px;cursor:pointer;
+  background:rgba(63,216,255,.04);border:1px solid #1c2a4a;color:#bfe9ff}
+.keypad button:active{background:rgba(63,216,255,.14)}
+.keypad .fn{font-size:11px;letter-spacing:.2em;color:var(--text-dim)}
+.remember{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;
+  color:#9fb4d2;margin-bottom:12px;cursor:pointer}
+.remember .box{width:16px;height:16px;border:1px solid var(--cyan-dim);border-radius:3px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan)}
+.result{border-radius:6px;padding:11px 13px;font-size:10.5px;line-height:1.6;margin-bottom:12px;letter-spacing:.06em}
+.result.testing{border:1px solid var(--cyan-dim);color:#bfe9ff}
+.result.ok{border:1px solid #1d6b55;color:var(--ok);background:rgba(87,224,184,.05)}
+.result.warn{border:1px solid #6b5318;color:var(--amber);background:rgba(255,201,77,.04)}
+.result .spin{display:inline-block;width:9px;height:9px;border:2px solid var(--cyan);
+  border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* short screens (the official Pi 7" touchscreen is 800x480): compact dialog */
+@media (max-height:540px){
+  .modal.addrmodal .inner{padding:12px}
+  .modal.addrmodal p{display:none}
+  .addrshow{height:40px;font-size:19px;margin-bottom:6px}
+  .keypad{gap:4px;margin-bottom:8px}
+  .keypad button{padding:6px 0;font-size:15px}
+  .remember{margin-bottom:8px}
+}

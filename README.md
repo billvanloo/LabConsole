@@ -19,6 +19,10 @@ cp config.example.json config.json        # fill in serials + access codes
 
 No printers handy? `.venv/bin/python server.py --demo` runs a full simulated fleet.
 
+Started from a terminal, the console checks each printer at its `config.json` address and
+asks for a new one if a printer doesn't answer (press Enter to let auto-discovery find it
+instead). Under systemd there's no prompt; the dashboard panels ask instead.
+
 Rather type a name than an IP? `sudo scripts/set-hostname.sh` names the Pi `labconsole`, so
 the console opens at `http://labconsole.local:8080` (same network only).
 

@@ -5,12 +5,15 @@ Run:  python3 server.py [config.json]
 Then open http://<pi>:8080
 """
 import asyncio
+import ipaddress
 import json
 import logging
 import logging.handlers
 import os
 import pathlib
 import re
+import select
+import shutil
 import sys
 import threading
 import time
@@ -40,6 +43,39 @@ if DEMO:
 else:
     CFG = json.loads(CONFIG_PATH.read_text())
 PRINTERS: dict[str, BambuPrinter] = {}
+_cfg_lock = threading.Lock()
+
+
+def save_printer_ip(pid, ip):
+    """Write a printer's new address into config.json, keeping config.json.bak.
+
+    Re-reads the file so nothing else in it changes except formatting (JSON is rewritten
+    with 2-space indents). The temp file takes the original's permissions before it
+    replaces it, since config.json holds access codes."""
+    with _cfg_lock:
+        data = json.loads(CONFIG_PATH.read_text())
+        entry = next((pc for pc in data.get("printers", []) if pc.get("id") == pid), None)
+        if entry is None:
+            raise ValueError(f"{pid} is not in {CONFIG_PATH.name}")
+        entry["ip"] = ip
+        shutil.copy2(CONFIG_PATH, CONFIG_PATH.with_name(CONFIG_PATH.name + ".bak"))
+        tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2) + "\n")
+        shutil.copymode(CONFIG_PATH, tmp)
+        os.replace(tmp, CONFIG_PATH)
+        for pc in CFG.get("printers", []):
+            if pc.get("id") == pid:
+                pc["ip"] = ip
+    log.info("%s: saved address %s to %s (previous copy: %s.bak)",
+             pid, ip, CONFIG_PATH.name, CONFIG_PATH.name)
+
+
+def valid_ipv4(text):
+    try:
+        ipaddress.IPv4Address(text)
+        return True
+    except ValueError:
+        return False
 STATE_VERSION = 0
 _version_lock = threading.Lock()
 
@@ -195,6 +231,9 @@ async def handle_command(ws, req):
         raise ValueError("unknown printer")
     action = req.get("action")
     log.info("%s: %s requested from the console", p.id, action)
+    if action == "set_address":
+        await set_address(ws, p, req)
+        return
     if action == "pause":
         p.pause()
     elif action == "resume":
@@ -210,9 +249,133 @@ async def handle_command(ws, req):
         p.start_print(name, CFG.get("sdcard_url_base", "file:///sdcard/"))
     elif action == "refresh":
         p.push_all()
+    elif action == "auto_find":
+        p.choose_auto("AUTO-FIND chosen on the console")
+        _bump()
     else:
         raise ValueError("unknown action")
     await ws.send_json({"type": "ack", "id": p.id, "action": action})
+
+
+async def set_address(ws, p, req):
+    """Typed-in address from the console: test it with this printer's access code, and
+    only then point the printer at it (and optionally save it to config.json)."""
+    ip = str(req.get("ip", "")).strip()
+    if not valid_ipv4(ip):
+        raise ValueError("not an IPv4 address")
+    if DEMO:
+        result = "ok"  # demo printers have nothing to test
+    else:
+        result = await asyncio.to_thread(discovery.probe_address, ip, p.access_code)
+    log.info("%s: address %s entered on the console: %s", p.id, ip, result)
+    saved, save_error = False, None
+    if result == "ok":
+        p.set_ip(ip)
+        if req.get("save", True) and not DEMO:
+            try:
+                await asyncio.to_thread(save_printer_ip, p.id, ip)
+                saved = True
+            except Exception as e:
+                save_error = str(e)
+                log.warning("%s: could not save address to %s: %s", p.id, CONFIG_PATH, e)
+        _bump()
+    await ws.send_json({"type": "address_result", "id": p.id, "ip": ip, "result": result,
+                        "saved": saved, "save_error": save_error})
+
+
+# --------------------------------------------------------------- startup check
+def _prompt(text, timeout):
+    """input() with a timeout. None on timeout or end of input."""
+    print(text, end="", flush=True)
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], timeout or None)
+    except (OSError, ValueError):   # no select() on this stdin: plain blocking read
+        ready = [sys.stdin]
+    if not ready:
+        print()
+        return None
+    line = sys.stdin.readline()
+    return line.strip() if line else None
+
+
+def startup_addresses():
+    """Test each printer's configured address before the console starts. When run in a
+    terminal, offer to type a new address for any that fail, or decline (Enter) and let
+    auto-discovery find it. Returns the ids of printers to search for straight away.
+
+    Skipped when there's no terminal to answer (systemd, piped stdin), with --no-prompt,
+    or with "startup_prompt": false; those cases fall through to the console's own prompt.
+    """
+    if (not sys.stdin.isatty() or "--no-prompt" in sys.argv
+            or not CFG.get("startup_prompt", True)):
+        return set()
+    timeout = float(CFG.get("discovery", {}).get("ask_timeout_s", 120))
+    printers = list(PRINTERS.values())
+    print(f"\nChecking {len(printers)} printer(s) at their configured addresses...")
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, len(printers))) as pool:
+        results = dict(zip([p.id for p in printers], pool.map(
+            lambda p: discovery.probe_address(p.ip, p.access_code) if p.ip else "noip",
+            printers)))
+    label = {"ok": "ok", "noanswer": "no answer", "refused": "refused the access code",
+             "noip": "no address in config"}
+    for p in printers:
+        print(f"  {p.name:<16} {p.ip or '-':<16} {label[results[p.id]]}")
+    failed = [p for p in printers if results[p.id] != "ok"]
+    if not failed:
+        print("All printers answered.\n")
+        return set()
+    auto, unattended = set(), False
+    for p in failed:
+        if unattended:
+            auto.add(p.id)
+            continue
+        why = {"noanswer": f"nothing answered at {p.ip}; it may have a new address",
+               "refused": f"something at {p.ip} refused its access code (a different "
+                          "printer there, or the access code in config.json is out of date)",
+               "noip": "config.json has no address for it"}[results[p.id]]
+        print(f"\n{p.name} ({p.model}, serial {p.serial}): {why}.")
+        print("  Type its current address (on the printer: Settings > Network),")
+        print("  or press Enter to let auto-discovery find it.")
+        while True:
+            ans = _prompt(f"  Address for {p.name} [auto]: ", timeout)
+            if ans is None:
+                print(f"  No answer; using auto-discovery for {p.name}"
+                      + (" and any remaining printers." if p is not failed[-1] else "."))
+                auto.add(p.id)
+                unattended = True
+                break
+            if ans == "":
+                print(f"  {p.name}: auto-discovery.")
+                auto.add(p.id)
+                break
+            if not valid_ipv4(ans):
+                print("  That isn't an address: four numbers 0-255 separated by dots.")
+                continue
+            print(f"  Testing {ans}...", end=" ", flush=True)
+            r = discovery.probe_address(ans, p.access_code)
+            if r == "noanswer":
+                print(f"nothing answered. Check the number, or press Enter for auto-discovery.")
+                continue
+            if r == "refused":
+                print(f"a printer answered but refused {p.name}'s access code, so it's a "
+                      "different printer. Check the address on its own screen.")
+                continue
+            print("connected.")
+            p.ip = p.last_ip = ans
+            log.info("%s: address %s entered at startup", p.id, ans)
+            keep = _prompt(f"  Save {ans} to {CONFIG_PATH.name}? [Y/n] ", timeout)
+            if keep is None or keep.lower() in ("", "y", "yes"):
+                try:
+                    save_printer_ip(p.id, ans)
+                    print(f"  Saved (previous copy in {CONFIG_PATH.name}.bak).")
+                except Exception as e:
+                    print(f"  Could not save: {e}. Using {ans} for this run only.")
+            else:
+                print("  Using it for this run only.")
+            break
+    print()
+    return auto
 
 
 # --------------------------------------------------------------- cameras
@@ -403,9 +566,13 @@ def main():
         for pc in CFG["printers"]:
             p = BambuPrinter(pc, on_change=_bump)
             PRINTERS[p.id] = p
+        search_now = startup_addresses()
+        for p in PRINTERS.values():
             log.info("%s: %s %s, ip %s, camera %s", p.id, p.model, p.serial,
                      p.ip or "(waiting for discovery)", p.camera_kind)
             p.start()
+            if p.id in search_now:
+                p.choose_auto("declined at startup")
 
         by_serial = {p.serial: p for p in PRINTERS.values()}
 
@@ -423,7 +590,9 @@ def main():
             subnet_scan=bool(dcfg.get("subnet_scan", True)),
             scan_subnets=dcfg.get("scan_subnets") or None,
             min_interval_s=float(dcfg.get("min_interval_s", 60)),
-            max_empty_scans=int(dcfg.get("max_empty_scans", 3)))
+            max_empty_scans=int(dcfg.get("max_empty_scans", 3)),
+            ask_before_search=bool(dcfg.get("ask_before_search", True)),
+            ask_timeout_s=float(dcfg.get("ask_timeout_s", 120)))
 
     @web.middleware
     async def revalidate_static(request, handler):
