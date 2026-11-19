@@ -10,8 +10,11 @@ Raspberry Pi 3+ (also runs unchanged on Ubuntu/other Linux). No cloud dependency
 the console talks to printers only over the local network. Printers may be in LAN Only +
 Developer Mode (full control) *or* left on Bambu Cloud, which the owner's school lab
 requires so students can print from Bambu Studio: there, local status and cameras work
-(verified on an X1C) but firmware may refuse some commands. Don't reintroduce wording
-that makes Developer Mode a requirement.
+(verified on X1C and H2D), as do the light and FTPS upload, but Authorization Control
+firmware refuses pause/resume/stop/start print with `mqtt message verify failed` (pause
+confirmed on the H2D) and raises HMS `0500_0500_0001_0007`, which `_HMS_NOT_FAULTS` in
+`printer.py` keeps out of the ERROR state. Don't reintroduce wording that makes Developer
+Mode a requirement.
 
 Visual style is a deliberate design constraint, not incidental: a dark navy CRT-panel
 aesthetic with cyan vector line art, amber accents, and red/orange reserved *exclusively*
@@ -291,7 +294,7 @@ mockup round:
   (bucketed when blocks would drop below 7 px), current layer amber and pulsing, violet and
   steady when paused. It reads `fleet` by printer id every frame, so pushes never tear it
   down; finished blocks are cached offscreen. It assumes `layer_num` is the 1-based layer
-  being printed (finished = `layer_num - 1`) — unconfirmed against real firmware. The
+  being printed (finished = `layer_num - 1`) — confirmed on the owner's printers. The
   **progress cube** (`progressCube()`, `mockups/progress-cube-mockup.html`, option A) is the
   other face in that rotation and an idle resting face: a tapered wedge meter of the job's
   percent and a glowing isometric wireframe cube (spins printing, holds when paused, drifts

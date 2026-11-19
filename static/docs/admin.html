@@ -39,15 +39,19 @@
       <tr><th>MODE</th><th>WHAT YOU GET</th><th>WHAT YOU GIVE UP</th></tr>
       <tr><td><b>Cloud mode</b> (printer stays on Bambu Cloud)</td>
           <td>Status, progress, ERROR detection, temperatures, AMS, and the camera. Bambu Studio and Bambu Handy keep printing and monitoring over the cloud as before.</td>
-          <td>Some controls may be refused. Firmware with Bambu&rsquo;s 2025 authorization change rejects certain commands from third-party software while the printer is cloud-connected; a refused command simply has no effect.</td></tr>
+          <td>Print control. Firmware with Bambu&rsquo;s 2025 Authorization Control only accepts pause, resume, stop, and start print when they are signed by Bambu Studio or Handy, so it refuses them from the console (<code>mqtt message verify failed</code>); a refused command has no effect on the print. The chamber light still works.</td></tr>
       <tr><td><b>LAN Only + Developer Mode</b></td>
           <td>Everything, including pause, resume, stop, light, and starting prints.</td>
           <td>The printer cannot connect to Bambu Cloud: no Bambu Handy, and Bambu Studio can only reach it from the same local network.</td></tr>
     </table>
     <p>Cloud mode is the usual choice in a shared lab where people send prints from their own
-       computers. Verified on an X1C: status, the live camera, and the chamber light all work
-       in cloud mode. Pause, resume, stop, and start print have not been verified there yet,
-       so test them on your own printers before relying on them.</p>
+       computers. Verified on X1C and H2D printers in cloud mode: status, the live camera, the
+       chamber light, and file upload work. Pause is refused (<code>mqtt message verify
+       failed</code>); resume, stop, and start print are the same kind of command and are
+       expected to be refused too. Use the printer&rsquo;s screen, Bambu Studio, or Bambu Handy
+       for those. The printer also raises HMS <code>0500_0500_0001_0007</code> (&ldquo;MQTT
+       command verification failed&rdquo;) when it refuses one; the console logs it as a notice
+       rather than showing ERROR, since the print carries on.</p>
     <p>Then, on <b>each printer</b>:</p>
     <ol>
       <li>Update to recent firmware.</li>
@@ -225,7 +229,7 @@ journalctl -u lab-console -f</code></pre>
       <tr><td>Anything not working as expected</td><td>Start with <code>lab-console.log</code> in the console folder (section 03). It records each command with the printer&rsquo;s reply, and each connection, camera, and file error.</td></tr>
       <tr><td>Browser shows &ldquo;invalid response&rdquo; or half-loaded pages over the network, while <code>localhost</code> works</td><td>The operating system&rsquo;s <code>sendfile</code> shortcut cutting replies short, seen on macOS. The console turns it off at startup (<code>AIOHTTP_NOSENDFILE=1</code>); if you run an older copy, start it with that variable set: <code>AIOHTTP_NOSENDFILE=1 .venv/bin/python server.py config.json</code>.</td></tr>
       <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, that the access code matches, and (for LAN Only printers) Developer Mode. If it got a new IP from DHCP, the panel asks for the address after 30 seconds: type it (it&rsquo;s on the printer&rsquo;s screen under Settings → Network) or tap AUTO-FIND. With nobody at the screen, auto-find starts after 2 minutes and usually finds it within a minute (SSDP search, then a subnet scan); <code>lab-console.log</code> shows each search and where the printer turned up. A DHCP reservation per printer avoids the gap entirely. If <em>every</em> panel is OFFLINE, the network may isolate Wi-Fi clients — see the network requirement in section 01.</td></tr>
-      <tr><td>Pause / stop / light has no effect</td><td>Check the log for that command. <code>no reply</code> or <code>printer REJECTED</code> means the printer is in cloud mode and its firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch that printer to LAN Only + Developer Mode.</td></tr>
+      <tr><td>Pause / stop / light has no effect</td><td>Check the log for that command. <code>printer REJECTED … mqtt message verify failed</code> (or <code>no reply</code>) means the printer is in cloud mode and its firmware refuses that command from third-party software; on current firmware that covers pause, resume, stop, and start print, but not the light. Use the printer screen, Bambu Studio, or Bambu Handy, or switch that printer to LAN Only + Developer Mode.</td></tr>
       <tr><td>X1/H2D camera NO SIGNAL</td><td>LAN Mode Liveview disabled, or ffmpeg not installed. Some H2D firmware versions have temporarily shipped without local liveview pending updates — status and control keep working.</td></tr>
       <tr><td>Camera face stays black</td><td>The console log gives the reason on lines starting <code>[camera …]</code> (<code>lab-console.log</code>, <code>journalctl -u lab-console -f</code>, or the terminal running <code>server.py</code>). <code>certificate verify failed</code> comes from a console copy older than the fix that accepts the printer&rsquo;s self-signed certificate, run with a newer ffmpeg; <code>Option tls_verify not found</code> comes from an older console copy run with an older ffmpeg (such as Raspberry Pi OS&rsquo;s). The current console handles both. Update it.</td></tr>
       <tr><td>A1 camera is ~1 fps</td><td>That is the chamber camera&rsquo;s hardware rate, not a fault.</td></tr>
