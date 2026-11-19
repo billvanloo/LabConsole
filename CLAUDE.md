@@ -233,6 +233,10 @@ asyncio.run(main())"
   (gitignored, it holds access codes). The terminal prompt runs only when stdin is a TTY,
   so systemd boots never block. `set_ip()` also sets `_wake` so `_run()`'s 5 s back-off
   doesn't delay the reconnect. Approved in `mockups/address-prompt-mockup.html`.
+  The dialog waits on exactly one `address_result`, so `addrDialog.fail()` ends a test on a
+  20 s timer, on `ws.onclose`, or on an `error` reply — before that, a lost answer (link
+  drop) left it on TESTING… for good. It also closes itself if the printer comes back online
+  while it's open (unless it's showing its own ✓ CONNECTED).
 - **Don't reuse `.dim` as a modifier.** `.dim` is the modal overlay (`position:fixed`,
   full screen, z-index 50). The NO SIGNAL tag used to be `camtag dim`, which turned it
   into an invisible full-screen sheet that swallowed every tap in an offline printer's

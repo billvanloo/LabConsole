@@ -19,7 +19,11 @@ const prevSeen = new Map();        // printer id -> {state, percent} from the la
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
   ws.onopen = () => { wsUp = true; renderLink(); };
-  ws.onclose = () => { wsUp = false; renderLink(); setTimeout(connect, 2500); };
+  ws.onclose = () => {
+    wsUp = false; renderLink(); setTimeout(connect, 2500);
+    // an address test's answer would have come back on this connection; it's lost now
+    if (addrDialog?.busy) addrDialog.fail("THE LINK TO THE CONSOLE DROPPED WHILE TESTING. TRY AGAIN WHEN THE STATUS BAR SHOWS LINK OK.");
+  };
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -30,7 +34,11 @@ function connect() {
       onFleetUpdate();
     }
     else if (msg.type === "address_result") addressResult(msg);
-    else if (msg.type === "error") toast(msg.detail, true);
+    else if (msg.type === "error") {
+      // the address dialog is waiting on its one answer: show the error there, not just a toast
+      if (addrDialog?.busy) addrDialog.fail(esc(msg.detail).toUpperCase());
+      else toast(msg.detail, true);
+    }
   };
 }
 // A finished job is a printing -> idle transition. Requires a previously observed
@@ -1056,12 +1064,12 @@ function faceSearch(p) {
     <div class="askclock">${clock}</div>`;
 }
 const validIp = s => /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(s);
-let addrDialog = null;   // {id, show(msg)} while the address dialog is open
+let addrDialog = null;   // {id, busy, connected, show(msg), fail(text)} while the address dialog is open
 function addressModal(id) {
   const p = fleet.find(x => x.id === id); if (!p) return;
   closeModal();
   const last = p.address?.last_ip || p.address?.ip || "";
-  let addr = last.replace(/\d+$/, ""), remember = true, busy = false;
+  let addr = last.replace(/\d+$/, ""), remember = true, busy = false, waitTimer = null;
   const dim = document.createElement("div"); dim.className = "dim";
   dim.innerHTML = `<div class="modal cyanline addrmodal"><div class="inner">
     <h3>⌨ SET ADDRESS — ${esc(p.name)}</h3>
@@ -1082,7 +1090,7 @@ function addressModal(id) {
     </div></div></div>`;
   document.body.appendChild(dim); pendingModal = dim;
   const $ = q => dim.querySelector(q);
-  const close = () => { addrDialog = null; closeModal(); };
+  const close = () => { clearTimeout(waitTimer); addrDialog = null; closeModal(); };
   function draw() {
     $("#as").innerHTML = (esc(addr) || '<span style="color:#33507c">0.0.0.0</span>') + '<span class="cur"></span>';
     const tooBig = addr.split(".").some(x => x !== "" && +x > 255);
@@ -1123,12 +1131,26 @@ function addressModal(id) {
     busy = true; draw();
     $("#res").innerHTML = `<div class="result testing"><span class="spin"></span>TESTING ${esc(addr)} — LOGGING IN WITH ${esc(p.name)}'S ACCESS CODE…</div>`;
     send({ type: "cmd", id, action: "set_address", ip: addr, save: remember });
+    // The server's test gives up within ~10 s (3 s port check + 4 s login). Past this, the
+    // answer was lost (e.g. the link dropped and came back) - never leave TESTING up forever.
+    clearTimeout(waitTimer);
+    waitTimer = setTimeout(() => addrDialog?.busy && addrDialog.fail(
+      "NO ANSWER FROM THE CONSOLE IN 20 SECONDS. CHECK THE STATUS BAR SHOWS LINK OK, THEN TRY AGAIN."), 20000);
   };
   addrDialog = {
     id,
+    get busy() { return busy; },
+    connected: false,     // showing its own ✓ CONNECTED; it closes itself
+
+    fail(text) {          // text is already escaped
+      clearTimeout(waitTimer); busy = false;
+      $("#res").innerHTML = `<div class="result warn">${text}</div>`;
+      draw();
+    },
     show(msg) {
-      busy = false;
+      clearTimeout(waitTimer); busy = false;
       if (msg.result === "ok") {
+        addrDialog.connected = true;
         const saved = msg.saved ? " SAVED TO CONFIG.JSON."
           : msg.save_error ? ` COULD NOT SAVE (${esc(msg.save_error)}); USING IT UNTIL RESTART.`
           : " THIS SESSION ONLY.";
@@ -1239,6 +1261,15 @@ async function startPrintModal(id) {
 
 /* ================= glue ================= */
 function onFleetUpdate() {
+  // The printer came back on its own (discovery found it, or its old address works again)
+  // while the address dialog was open: nothing left to ask.
+  if (addrDialog && !addrDialog.busy && !addrDialog.connected) {
+    const ap = fleet.find(x => x.id === addrDialog.id);
+    if (ap && ap.state !== "offline") {
+      const name = ap.name; addrDialog = null; closeModal();
+      toast(`${name} IS BACK ONLINE`);
+    }
+  }
   if (currentView.name === "fleet") renderFleet(false);
   else renderDetail(false);
 }
