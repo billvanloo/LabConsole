@@ -90,6 +90,12 @@ class DemoPrinter:
             self._state = "printing"
 
     # ------------------------------------------------- BambuPrinter surface
+    addr_mode = "normal"
+    ask_timeout_s = 0
+
+    def choose_auto(self, why=""):
+        pass  # demo printers are never lost
+
     def set_ip(self, ip):
         pass
 

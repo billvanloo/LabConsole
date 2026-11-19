@@ -20,6 +20,7 @@
     <a href="#s2" class="sub2">— PRINTER STATES</a>
     <a href="#s3" class="sub2">— CAMERA VIEWS</a>
     <a href="#s4" class="sub2">— CONTROLS</a>
+    <a href="#s5" class="sub2">— LOST PRINTERS</a>
     <a href="/static/docs/admin.html">ADMIN GUIDE</a>
     <a href="/static/docs/reference.html">TECHNICAL REFERENCE</a>
     <div class="grp">TRAINING</div>
@@ -89,7 +90,7 @@
       <tr><td><span class="lamp error"></span><span class="sw error">ERROR</span></td>
           <td>Blinking red — and the <b>entire panel bezel flashes red</b> in sync. The readout lists HMS code(s). Error panels never show the scanner animation: they hold the fault readout, giving way only to the live camera on their turn so you can see the failed print.</td></tr>
       <tr><td><span class="lamp offline"></span><span class="sw offline">OFFLINE</span></td>
-          <td>Dark lamp. No MQTT link — check power, network, and the printer&rsquo;s network settings.</td></tr>
+          <td>Dark lamp. No MQTT link — check power, network, and the printer&rsquo;s network settings. After 30 seconds the panel asks for the printer&rsquo;s address (see <a href="#s5">Lost printers</a>).</td></tr>
     </table>
 
     <figure class="shot">
@@ -186,6 +187,30 @@
       <div class="ct">◈ GOOD PRACTICE</div>
       <p>Before starting a print remotely, use the camera to confirm the bed is clear. The console cannot see what the camera cannot.</p>
     </div>
+
+    <h2 id="s5"><span class="idx">05</span> LOST PRINTERS</h2>
+    <p>A printer that has been unreachable for 30 seconds usually has a new address from the
+       network. Its panel <b>stops cycling and asks</b>, and a white <b>NEEDS ADDRESS</b> chip
+       appears in the status bar:</p>
+    <ul>
+      <li><b>⌨ ENTER ADDRESS</b> — type the printer&rsquo;s current address. It&rsquo;s on the
+          printer&rsquo;s own screen under Settings → Network. Use the on-screen keypad or a
+          keyboard, then <b>CONNECT</b>.</li>
+      <li><b>⌖ AUTO-FIND</b> — let the console search the network for it.</li>
+    </ul>
+    <p>If nobody answers within 2 minutes, the console starts auto-find by itself, so a
+       printer that moves overnight is found without anyone at the screen. While it searches,
+       the panel shows <b>SEARCHING THE NETWORK…</b> with the next attempt&rsquo;s countdown,
+       and ENTER ADDRESS stays available. From the detail view, <b>⌨ SET ADDRESS…</b> opens
+       the same dialog at any time while the printer is offline.</p>
+    <p>Before accepting an address, the console tests it by logging in with that
+       printer&rsquo;s own access code:</p>
+    <table class="ref">
+      <tr><th>RESULT</th><th>MEANING</th></tr>
+      <tr><td>✓ CONNECTED</td><td>The printer is there. The console reconnects at once and, unless you clear <b>SAVE TO CONFIG.JSON</b>, keeps the address for the next restart.</td></tr>
+      <tr><td>IT ISN&rsquo;T &lt;PRINTER&gt;</td><td>Another printer answered at that address and refused this one&rsquo;s access code. Check the address on the right printer&rsquo;s screen.</td></tr>
+      <tr><td>NOTHING ANSWERED</td><td>No printer at that address. Check the number, or use AUTO-FIND.</td></tr>
+    </table>
 
     <div class="pagenav">
       <a href="/static/docs/index.html">◂ OVERVIEW</a>

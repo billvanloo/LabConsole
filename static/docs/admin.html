@@ -82,6 +82,28 @@ nano config.json              # fill in serials + access codes
 .venv/bin/python server.py    # open http://&lt;pi-address&gt;:8080</code></pre>
     <p>To evaluate without printers, run <code>.venv/bin/python server.py --demo</code> — no
        config file is required.</p>
+    <h3>STARTUP CHECK</h3>
+    <p>Run from a terminal, the console first tests each printer at its address in
+       <code>config.json</code>. For any that don&rsquo;t answer, it asks for the current address,
+       or press <b>Enter</b> to let auto-discovery find it:</p>
+    <pre><code>Checking 3 printer(s) at their configured addresses...
+  VOYAGER-01       192.168.1.50     ok
+  OUTPOST-02       192.168.1.51     no answer
+  SCOUT-03         192.168.1.52     ok
+
+OUTPOST-02 (H2D, serial 00W00B000000000): nothing answered at 192.168.1.51; it may have a new address.
+  Type its current address (on the printer: Settings > Network),
+  or press Enter to let auto-discovery find it.
+  Address for OUTPOST-02 [auto]: 192.168.1.73
+  Testing 192.168.1.73... connected.
+  Save 192.168.1.73 to config.json? [Y/n]</code></pre>
+    <p>A typed address is tested with that printer&rsquo;s access code before it&rsquo;s used,
+       and a saved one keeps the previous file as <code>config.json.bak</code>. If nobody answers
+       a prompt within <code>discovery.ask_timeout_s</code> (2 minutes), that printer and any
+       remaining ones go to auto-discovery. The check is skipped when there&rsquo;s no terminal
+       to answer (systemd, a kiosk autostart), with <code>--no-prompt</code>, or with
+       <code>"startup_prompt": false</code>. In those cases the console&rsquo;s own panels ask
+       instead.</p>
     <h3>OPTIONAL: A NAME INSTEAD OF AN IP ADDRESS</h3>
     <p>To open the console at <code>http://labconsole.local:8080</code> rather than the Pi&rsquo;s
        address, run <code>sudo scripts/set-hostname.sh</code> (or pass another name, e.g.
@@ -103,12 +125,10 @@ nano config.json              # fill in serials + access codes
     </div>
     <div class="callout">
       <div class="ct">◈ NOTE</div>
-      <p>The paths above and in <code>lab-console.service</code> assume the user
-         <code>pi</code>. Newer Raspberry Pi OS images have no default <code>pi</code> account
-         — if you chose a different username, substitute it for <code>pi</code> in
-         <code>/home/pi/lab-console</code> here and in the service file&rsquo;s
-         <code>User=</code>, <code>WorkingDirectory=</code> and <code>ExecStart=</code>
-         lines.</p>
+      <p>The paths above assume the user <code>pi</code>. Newer Raspberry Pi OS images have no
+         default <code>pi</code> account — if you chose a different username, substitute your
+         own home folder. <code>scripts/install-service.sh</code> (section 04) fills in the
+         right account and folder in the service file for you.</p>
     </div>
 
     <h3>RUNNING ON UBUNTU / OTHER LINUX HOSTS</h3>
@@ -152,6 +172,9 @@ python3 -m venv .venv
       <tr><td>discovery.subnet_scan</td><td>true</td><td>Last-resort search: probe the local /24 for printers on port 8883. Each candidate is identified by the serial in its TLS certificate, or by logging in with the missing printer's access code. Turn off if port scans on your network are unwelcome.</td></tr>
       <tr><td>discovery.scan_subnets</td><td>[]</td><td>Subnets to scan, e.g. <code>["192.168.20.0/24"]</code>. Empty means the console host's own /24.</td></tr>
       <tr><td>discovery.min_interval_s</td><td>60</td><td>Minimum time between search passes. Passes that find nothing back off, doubling up to 10 minutes.</td></tr>
+      <tr><td>discovery.ask_before_search</td><td>true</td><td>When a printer has been offline for <code>rediscover_after_s</code>, its panel asks for an address (ENTER ADDRESS / AUTO-FIND) before any search. <code>false</code> searches straight away, as in 1.7.</td></tr>
+      <tr><td>discovery.ask_timeout_s</td><td>120</td><td>If nobody answers the panel or startup prompt in this long, auto-discovery starts by itself. 0 waits for a person indefinitely.</td></tr>
+      <tr><td>startup_prompt</td><td>true</td><td>Test each printer at startup and, when run in a terminal, ask for addresses that don&rsquo;t answer. Also off with <code>--no-prompt</code>.</td></tr>
       <tr><td>discovery.max_empty_scans</td><td>3</td><td>After this many subnet scans in a row miss a printer, it isn't scanned for again until it reconnects, so a printer switched off for the night doesn't have the network swept every 10 minutes. The SSDP search keeps running. 0 means no limit.</td></tr>
       <tr><td>camera.max_streams</td><td>1</td><td>Concurrent camera relays. Keep at 1 on a Pi 3; a Pi 4/5 can take more. A new viewer evicts the oldest when the limit is hit.</td></tr>
       <tr><td>camera.rtsp_fps</td><td>8</td><td>Relay frame rate for RTSPS cameras (transcode cost knob).</td></tr>
@@ -173,11 +196,24 @@ python3 -m venv .venv
        failures, and discovery problems.</p>
 
     <h2 id="s4"><span class="idx">04</span> RUN AT BOOT / KIOSK DISPLAY</h2>
-    <pre><code>sudo cp lab-console.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now lab-console
+    <p>Install the console as a systemd service so it starts at boot and restarts itself if it
+       crashes. From the checkout:</p>
+    <pre><code>sudo scripts/install-service.sh
 # logs:
 journalctl -u lab-console -f</code></pre>
+    <p>The script fills this checkout&rsquo;s folder and its owner&rsquo;s account into
+       <code>lab-console.service</code> (which assumes <code>/home/pi/lab-console</code>) and
+       installs it. Before starting, it checks the <code>.venv</code> (creating it and installing
+       the requirements if needed), that <code>config.json</code> parses and every printer has an
+       id, serial and access code, that <code>ffmpeg</code> is present, and that nothing else holds
+       the port &mdash; usually a copy of the console started by hand in a terminal, which has to be
+       stopped first. Then it enables and starts the service and waits for the console to answer;
+       if it doesn&rsquo;t, it prints the last log lines. Pass <code>--user NAME</code> to run it
+       as another account, <code>--check</code> to report without changing anything, or
+       <code>--uninstall</code> to stop and remove the service. It is safe to run again: after a
+       <code>git pull</code> it updates the unit if needed and restarts the console
+       (<code>sudo systemctl restart lab-console</code> does the same when the unit hasn&rsquo;t
+       changed).</p>
     <p>For a dedicated wall display, point a kiosk browser at the console, e.g.
        <code>chromium-browser --kiosk http://localhost:8080</code>. The frontend pauses its
        panel cycling while the browser tab is hidden, so an always-on display costs the Pi
@@ -188,7 +224,7 @@ journalctl -u lab-console -f</code></pre>
       <tr><th>SYMPTOM</th><th>LIKELY CAUSE / FIX</th></tr>
       <tr><td>Anything not working as expected</td><td>Start with <code>lab-console.log</code> in the console folder (section 03). It records each command with the printer&rsquo;s reply, and each connection, camera, and file error.</td></tr>
       <tr><td>Browser shows &ldquo;invalid response&rdquo; or half-loaded pages over the network, while <code>localhost</code> works</td><td>The operating system&rsquo;s <code>sendfile</code> shortcut cutting replies short, seen on macOS. The console turns it off at startup (<code>AIOHTTP_NOSENDFILE=1</code>); if you run an older copy, start it with that variable set: <code>AIOHTTP_NOSENDFILE=1 .venv/bin/python server.py config.json</code>.</td></tr>
-      <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, that the access code matches, and (for LAN Only printers) Developer Mode. If it got a new IP from DHCP, the console finds it again on its own, usually within a minute (SSDP search, then a subnet scan); <code>lab-console.log</code> shows each search and where the printer turned up. A DHCP reservation per printer avoids the gap entirely. If <em>every</em> panel is OFFLINE, the network may isolate Wi-Fi clients — see the network requirement in section 01.</td></tr>
+      <tr><td>Panel OFFLINE</td><td>Printer unreachable over MQTT. Check power, LAN, that the access code matches, and (for LAN Only printers) Developer Mode. If it got a new IP from DHCP, the panel asks for the address after 30 seconds: type it (it&rsquo;s on the printer&rsquo;s screen under Settings → Network) or tap AUTO-FIND. With nobody at the screen, auto-find starts after 2 minutes and usually finds it within a minute (SSDP search, then a subnet scan); <code>lab-console.log</code> shows each search and where the printer turned up. A DHCP reservation per printer avoids the gap entirely. If <em>every</em> panel is OFFLINE, the network may isolate Wi-Fi clients — see the network requirement in section 01.</td></tr>
       <tr><td>Pause / stop / light has no effect</td><td>Check the log for that command. <code>no reply</code> or <code>printer REJECTED</code> means the printer is in cloud mode and its firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch that printer to LAN Only + Developer Mode.</td></tr>
       <tr><td>X1/H2D camera NO SIGNAL</td><td>LAN Mode Liveview disabled, or ffmpeg not installed. Some H2D firmware versions have temporarily shipped without local liveview pending updates — status and control keep working.</td></tr>
       <tr><td>Camera face stays black</td><td>The console log gives the reason on lines starting <code>[camera …]</code> (<code>lab-console.log</code>, <code>journalctl -u lab-console -f</code>, or the terminal running <code>server.py</code>). <code>certificate verify failed</code> comes from a console copy older than the fix that accepts the printer&rsquo;s self-signed certificate, run with a newer ffmpeg; <code>Option tls_verify not found</code> comes from an older console copy run with an older ffmpeg (such as Raspberry Pi OS&rsquo;s). The current console handles both. Update it.</td></tr>

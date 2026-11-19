@@ -304,7 +304,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["PRINTING", "Pulsing amber. File name, layer count, temperatures, time remaining, progress."],
         ["PAUSED", "Steady violet. Job held; resume from the detail view."],
         ["ERROR", "Blinking red lamp <b>and the entire panel bezel flashes red in sync</b>. Readout lists HMS code(s). Error panels never show the scanner animation; they give way only to the live camera on their turn."],
-        ["OFFLINE", "Dark lamp. No MQTT link \u2014 check power, network, and the printer\u2019s network settings."],
+        ["OFFLINE", "Dark lamp. No MQTT link \u2014 check power, network, and the printer\u2019s network settings. After 30 s the panel asks for its address (Lost printers, below)."],
     ], [0.9 * inch, 5.5 * inch])
     e += [PanelFig(),
           Paragraph("FIG 2.1 \u2014 A PRINTING PANEL AND AN ERROR PANEL AS DRAWN ON THE CONSOLE.", S["cap"]),
@@ -342,6 +342,20 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                  "asks for confirmation before sending it.")
     e += callout("warn", "\u25c8 GOOD PRACTICE",
                  "Before starting a print remotely, use the camera to confirm the bed is clear.")
+    e += [Paragraph("05 \u00b7 LOST PRINTERS", S["h2"]), rule(),
+          P("A printer unreachable for 30 seconds usually has a new address. Its panel stops "
+            "cycling and asks, and a white NEEDS ADDRESS chip appears in the status bar. "
+            "<b>ENTER ADDRESS</b>: type the address shown on the printer\u2019s screen under "
+            "Settings \u2192 Network (on-screen keypad or keyboard), then CONNECT. "
+            "<b>AUTO-FIND</b>: let the console search the network. With nobody at the screen, "
+            "auto-find starts after 2 minutes. While searching, the panel shows SEARCHING THE "
+            "NETWORK\u2026 and ENTER ADDRESS stays available; the detail view offers SET "
+            "ADDRESS\u2026 any time the printer is offline.")]
+    e += ref_table(["RESULT", "MEANING"], [
+        ["CONNECTED", "The printer is there. The console reconnects at once and, unless SAVE TO CONFIG.JSON is cleared, keeps the address for the next restart."],
+        ["IT ISN'T <PRINTER>", "Another printer answered and refused this one\u2019s access code. Check the address on the right printer\u2019s screen."],
+        ["NOTHING ANSWERED", "No printer at that address. Check the number, or use AUTO-FIND."],
+    ], [1.6 * inch, 4.8 * inch])
     e += [PageBreak()]
 
     # ---- admin guide
@@ -400,6 +414,12 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                ".venv/bin/pip install -r requirements.txt\n"
                "cp config.example.json config.json   # fill in serials + access codes\n"
                ".venv/bin/python server.py           # open http://<pi>:8080"),
+          P("<b>Startup check:</b> run from a terminal, the console tests each printer at its "
+            "config.json address and asks for any that don\u2019t answer (press Enter for "
+            "auto-discovery). A typed address is tested with the printer\u2019s access code; "
+            "saving keeps config.json.bak. Unanswered prompts go to auto-discovery after "
+            "discovery.ask_timeout_s. Skipped with no terminal (systemd), --no-prompt, or "
+            "\"startup_prompt\": false; the panels ask instead."),
           P("<b>Optional, a name instead of an IP address:</b> <font face='Courier'>sudo "
             "scripts/set-hostname.sh</font> names the Pi <font face='Courier'>labconsole</font> (or "
             "pass another name), makes sure the Avahi mDNS service is running and starts at boot, "
@@ -413,10 +433,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                    "own libraries instead, so always start it with .venv/bin/python \u2014 plain "
                    "python3 won\u2019t see them. The systemd unit already does this."),
           *callout("note", "\u25c8 NOTE",
-                   "Paths here and in lab-console.service assume the user pi. Newer Raspberry Pi "
-                   "OS images have no default pi account \u2014 if yours differs, substitute it in "
-                   "/home/pi/lab-console and in the service file\u2019s User=, WorkingDirectory= "
-                   "and ExecStart= lines."),
+                   "Paths here assume the user pi. Newer Raspberry Pi OS images have no default "
+                   "pi account \u2014 if yours differs, substitute your own home folder. "
+                   "scripts/install-service.sh (section 04) fills in the right account and folder "
+                   "in the service file for you."),
           Paragraph("RUNNING ON UBUNTU / OTHER LINUX HOSTS", S["h3"]),
           P("The console runs unchanged on a standard Ubuntu machine (desktop or server) "
             "instead of a Raspberry Pi \u2014 nothing in the code is Pi-specific. Install the "
@@ -452,6 +472,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
         ["discovery.subnet_scan", "true", "Last resort: probe the local /24 on port 8883; identify by TLS certificate serial or access-code login."],
         ["discovery.scan_subnets", "[]", "Subnets to scan; empty means the host's own /24."],
         ["discovery.min_interval_s", "60", "Minimum time between search passes; empty passes back off up to 10 min."],
+        ["discovery.ask_before_search", "true", "Offline printers ask for an address (ENTER ADDRESS / AUTO-FIND) before any search. false = search straight away."],
+        ["discovery.ask_timeout_s", "120", "Unanswered panel or startup prompts go to auto-discovery after this. 0 = wait for a person."],
+        ["startup_prompt", "true", "Test printers at startup and ask in the terminal for any that fail (also off with --no-prompt)."],
         ["discovery.max_empty_scans", "3", "Subnet scans in a row that miss a printer before it stops being scanned for, until it reconnects; SSDP search continues. 0 = no limit."],
         ["camera.max_streams", "1", "Concurrent camera relays; keep 1 on a Pi 3. New viewers evict the oldest."],
         ["camera.rtsp_fps / rtsp_width", "8 / 640", "RTSPS transcode cost knobs."],
@@ -469,10 +492,19 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "HMS codes in Bambu\u2019s wiki format (e.g. 0300_0100_0001_0007), file list and "
             "upload failures, camera failures, and discovery problems.")]
     e += [Paragraph("04 \u00b7 RUN AT BOOT / KIOSK DISPLAY", S["h2"]), rule(),
-          CODE("sudo cp lab-console.service /etc/systemd/system/\n"
-               "sudo systemctl daemon-reload\n"
-               "sudo systemctl enable --now lab-console\n"
+          CODE("sudo scripts/install-service.sh\n"
                "journalctl -u lab-console -f     # logs"),
+          P("The script fills this checkout\u2019s folder and owner into lab-console.service "
+            "(which assumes /home/pi/lab-console) and installs it, so the console starts at boot "
+            "and restarts if it crashes. First it checks the .venv (creating it if needed), that "
+            "config.json parses and every printer has an id, serial and access code, that ffmpeg "
+            "is present, and that nothing else holds the port \u2014 usually the console started "
+            "by hand, which must be stopped first. It then starts the service and waits for the "
+            "console to answer, printing the last log lines if it doesn\u2019t. "
+            "<font face='Courier'>--user NAME</font> runs it as another account, "
+            "<font face='Courier'>--check</font> reports only, "
+            "<font face='Courier'>--uninstall</font> removes it. Safe to re-run after a git pull: "
+            "it updates the unit if needed and restarts the console."),
           P("For a wall display, run a kiosk browser: "
             "<font face='Courier'>chromium-browser --kiosk http://localhost:8080</font>. The "
             "frontend pauses panel cycling while the tab is hidden."),
@@ -480,7 +512,7 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
         ["Browser: invalid response or half-loaded pages over the network (localhost works)", "The OS sendfile shortcut cutting replies short, seen on macOS. The console turns it off at startup (AIOHTTP_NOSENDFILE=1); start an older copy with that variable set."],
-        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. If DHCP moved it, the console re-finds it on its own, usually within a minute; lab-console.log shows each search. A DHCP reservation avoids the gap. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
+        ["Panel OFFLINE", "Printer unreachable over MQTT. Check power, LAN, access code, and (LAN Only printers) Developer Mode. If DHCP moved it, the panel asks for the address after 30 s (type it, or AUTO-FIND); unattended, auto-find starts after 2 min. lab-console.log shows each search. A DHCP reservation avoids the gap. If every panel is OFFLINE, the network may isolate Wi-Fi clients (see section 01)."],
         ["Pause / stop / light has no effect", "Check the log: \u2018no reply\u2019 or \u2018printer REJECTED\u2019 means a cloud-mode printer whose firmware refuses that command from third-party software. Use the printer screen, Bambu Studio, or Bambu Handy, or switch it to LAN Only + Developer Mode."],
         ["X1/H2D camera NO SIGNAL", "LAN Mode Liveview off, or ffmpeg missing. Some H2D firmware temporarily shipped without local liveview \u2014 status/control keep working."],
         ["Camera face stays black", "The console log (lab-console.log) gives the reason on [camera \u2026] lines. \u2018certificate verify failed\u2019 means an older console copy run with a newer ffmpeg; \u2018Option tls_verify not found\u2019 an older copy run with an older ffmpeg (e.g. Raspberry Pi OS). The current console handles both: update it."],
@@ -553,6 +585,11 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "discovery.max_empty_scans (3) scans in a row miss a printer it is no longer scanned "
             "for until it reconnects (SSDP search continues); /cam/<id> returns "
             "503 while the printer is offline."),
+          P("<b>Asking first (1.8)</b> \u2014 with discovery.ask_before_search on, a printer offline "
+            "for rediscover_after_s moves address.mode normal \u2192 ask (panel prompt); it becomes "
+            "auto (searched) on AUTO-FIND, a declined startup prompt, or ask_timeout_s with no "
+            "answer. A typed address is accepted only if probe_address() gets an MQTT login with "
+            "the printer\u2019s access code (ok / refused / noanswer), then goes through set_ip()."),
           Paragraph("04 \u00b7 WEBSOCKET SCHEMA", S["h2"]), rule(),
           CODE('{ "type":"fleet", "version":123, "demo":false, "printers":[ {\n'
                '    "id":"voyager01","name":"VOYAGER-01","model":"X1 CARBON",\n'
@@ -566,9 +603,14 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                '    "hms":[{"attr":...,"code":...}],"print_error":0 } ] }'),
           P("Client \u2192 server, acknowledged with {\"type\":\"ack\"} or {\"type\":\"error\"}:"),
           CODE('{ "type":"cmd", "id":"voyager01",\n'
-               '  "action":"pause|resume|stop|light|start_print|refresh",\n'
+               '  "action":"pause|resume|stop|light|start_print|refresh|auto_find|set_address",\n'
                '  "on":true,          // light only\n'
-               '  "file":"part.3mf" } // start_print only'),
+               '  "file":"part.3mf",  // start_print only\n'
+               '  "ip":"192.168.1.73", "save":true } // set_address only'),
+          P("set_address answers {\"type\":\"address_result\", \"result\": ok|refused|noanswer, "
+            "\"saved\", \"save_error\"} once tested. Each printer view also carries an address "
+            "object: mode (normal|ask|auto), ip, last_ip, offline_s, ask_left_s, and search "
+            "progress."),
           Paragraph("05 \u00b7 HTTP API", S["h2"]), rule()]
     e += ref_table(["ENDPOINT", "METHOD", "PURPOSE"], [
         ["/", "GET", "The console UI."],

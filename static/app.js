@@ -29,6 +29,7 @@ function connect() {
       document.getElementById("demobadge").classList.toggle("hidden", !msg.demo);
       onFleetUpdate();
     }
+    else if (msg.type === "address_result") addressResult(msg);
     else if (msg.type === "error") toast(msg.detail, true);
   };
 }
@@ -677,6 +678,8 @@ function faceStatus(p) {
       <canvas class="reticle" data-pct="${pct}" data-col="al" data-label="HELD"></canvas>
       <span class="facechip">STATUS</span>`;
   }
+  if (s === "offline" && p.address?.mode === "ask") return faceAsk(p);
+  if (s === "offline" && p.address?.mode === "auto") return faceSearch(p);
   if (s === "offline") {
     return `
       <div class="statword offline">OFFLINE</div>
@@ -714,7 +717,7 @@ function faceRest(kind) {
 function faceCam(p) {
   if (p.camera === "none" || p.state === "offline")
     return `<canvas class="bganim" data-anim="scan"></canvas>
-      <span class="camtag dim">NO SIGNAL</span>
+      <span class="camtag nosig">NO SIGNAL</span>
       <span class="camfoot">LIVEVIEW UNAVAILABLE</span>`;
   if (p.camera === "demo")
     return `<canvas class="bganim" data-anim="camdemo"></canvas>
@@ -739,7 +742,13 @@ function ensurePanels() {
     el.innerHTML = `<div class="crt">
       <div class="phead"><span class="lamp"></span><span class="pname nameglow"></span><span class="pmodel"></span></div>
       <div class="pbody"></div></div>`;
-    el.addEventListener("click", () => openDetail(p.id));
+    el.addEventListener("click", e => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return openDetail(p.id);
+      e.stopPropagation();
+      if (b.dataset.act === "addr") addressModal(p.id);
+      else if (b.dataset.act === "auto") send({ type: "cmd", id: p.id, action: "auto_find" });
+    });
     grid.appendChild(el);
     panelEls.set(p.id, el);
   });
@@ -755,6 +764,9 @@ function panelFaceFor(p, idx) {
   // With a multi-printer fleet the camera hops from panel to panel, so only one
   // relay is ever open. A solo printer has no one to hand off to, so it gets the
   // camera on one turn in three instead (idx === camHolder % 1 would pin it there).
+  // A lost printer that's asking for an address, or being searched for, holds its face:
+  // the ENTER ADDRESS button mustn't vanish on a camera turn (there's no picture anyway).
+  if (p.state === "offline" && needsAddress(p)) return ["status", faceStatus(p)];
   const camTurn = n > 1 ? idx === camHolder % n : tick % 3 === 2;
   if (camTurn) return ["cam", faceCam(p)];
   if (frozen) return ["status", faceStatus(p)];
@@ -812,16 +824,19 @@ function renderFleet(forceFaces) {
   });
   renderStatusbar();
 }
-const stamp = p => [p.state, p.percent, p.layer, p.nozzle, p.bed, p.file, p.remaining_min].join("|");
+const stamp = p => [p.state, p.percent, p.layer, p.nozzle, p.bed, p.file, p.remaining_min,
+  JSON.stringify(p.address || {}, (k, v) => k === "offline_s" || k === "ask_left_s" ? undefined : v)].join("|");
 
 function renderStatusbar() {
   const counts = { idle: 0, printing: 0, paused: 0, error: 0, offline: 0 };
   fleet.forEach(p => counts[p.state]++);
+  const asking = fleet.filter(p => p.state === "offline" && p.address?.mode === "ask").length;
   document.getElementById("chips").innerHTML = `
     <span class="fleetchip"><span class="dot idle"></span>${counts.idle} IDLE</span>
     <span class="fleetchip"><span class="dot print"></span>${counts.printing + counts.paused} PRINTING</span>
     <span class="fleetchip"><span class="dot err"></span>${counts.error} ERROR</span>
-    <span class="fleetchip"><span class="dot off"></span>${counts.offline} OFFLINE</span>`;
+    <span class="fleetchip"><span class="dot off"></span>${counts.offline} OFFLINE</span>`
+    + (asking ? `<span class="fleetchip needchip"><span class="dot"></span>${asking} NEEDS ADDRESS</span>` : "");
 }
 function renderLink() {
   const el = document.getElementById("link");
@@ -873,7 +888,7 @@ function renderDetail(full) {
       ? `<canvas class="bganim" data-anim="complete" data-t0="${(celebrateUntil.get(p.id) || Date.now()) - CELEBRATE_MS}" style="width:100%;height:250px"></canvas>`
       : (p.camera === "none" || p.state === "offline")
       ? `<canvas class="bganim" data-anim="radar" style="width:100%;height:250px"></canvas>
-         <span class="camtag dim">NO SIGNAL</span>`
+         <span class="camtag nosig">NO SIGNAL</span>`
       : p.camera === "demo"
       ? `<canvas class="bganim" data-anim="camdemo" style="width:100%;height:250px"></canvas>
          <span class="camtag rec">LIVE · DEMO</span>`
@@ -923,7 +938,16 @@ function renderDetail(full) {
   bp.textContent = p.state === "paused" ? "▶ RESUME" : "⏸ PAUSE";
   bp.disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
   document.getElementById("btn-stop").disabled = !(p.state === "printing" || p.state === "paused" || p.state === "error");
-  document.getElementById("btn-start").disabled = (p.state === "printing" || p.state === "offline");
+  const bs = document.getElementById("btn-start");
+  if (p.state === "offline" && p.address) {
+    bs.textContent = "⌨ SET ADDRESS…"; bs.className = "cbtn wide addr"; bs.disabled = false;
+    bs.onclick = () => addressModal(p.id);
+  } else {
+    bs.textContent = "▲ START PRINT…"; bs.className = "cbtn wide"; bs.disabled = p.state === "printing";
+    bs.onclick = () => startPrintModal(p.id);
+  }
+  if (p.state === "offline" && p.address?.last_ip)
+    document.getElementById("dstate").textContent = `OFFLINE · LAST SEEN ${p.address.last_ip}`;
   const slots = (p.ams || []).slice(0, 4);
   // On a wide screen a progress block heads this column: the fleet panels' reticle beside
   // file, time left and layer, which then drop out of the grid below (CSS hides the
@@ -964,6 +988,151 @@ function renderDetail(full) {
   // redrawn with each push; hidden (zero-size) outside the wide layout, where fit() skips it
   document.querySelectorAll("#telem canvas.reticle").forEach(cv =>
     reticle(cv, +cv.dataset.pct || 0, { al: AL, vi: VI }[cv.dataset.col] || AM, cv.dataset.label));
+}
+
+/* ================= lost printers: address prompt + search (v1.8) =================
+   Approved in mockups/address-prompt-mockup.html. When a printer has been offline for
+   discovery.rediscover_after_s, the server sets address.mode to "ask"; after AUTO-FIND (or
+   discovery.ask_timeout_s with no answer) it becomes "auto" while rediscovery searches. */
+const needsAddress = p => p.address && p.address.mode !== "normal";
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s) % 60).padStart(2, "0")}`;
+// Server times arrive as seconds-at-push; count locally from then. data-up counts up,
+// data-down counts down, both from data-t0 (the moment the face was rendered).
+function timer(sec, dir) {
+  return sec == null ? "—" :
+    `<b data-${dir}="${sec}" data-t0="${Date.now()}">${mmss(sec)}</b>`;
+}
+setInterval(() => {
+  const now = Date.now();
+  document.querySelectorAll("[data-up],[data-down]").forEach(e => {
+    const dt = (now - +e.dataset.t0) / 1000;
+    e.textContent = mmss(e.dataset.up != null ? +e.dataset.up + dt : Math.max(0, +e.dataset.down - dt));
+  });
+}, 1000);
+function faceAsk(p) {
+  const a = p.address;
+  const where = a.last_ip ? `NO ANSWER AT <b>${esc(a.last_ip)}</b> FOR ${timer(a.offline_s, "up")}<br>
+    ITS ADDRESS MAY HAVE CHANGED.` : `NO ADDRESS YET — NOT IN CONFIG.JSON<br>AND NOT ANNOUNCED ON THE LAN.`;
+  const clock = a.ask_left_s != null
+    ? `AUTO-FIND STARTS IN ${timer(a.ask_left_s, "down")} IF NOBODY ANSWERS`
+    : `WAITING FOR AN ANSWER`;
+  return `
+    <div class="statword offline">OFFLINE</div>
+    <div class="askline">${where}</div>
+    <div class="askrow">
+      <button class="cbtn addr" data-act="addr">⌨ ENTER ADDRESS</button>
+      <button class="cbtn" data-act="auto">⌖ AUTO-FIND</button>
+    </div>
+    <div class="askclock">${clock}</div>`;
+}
+function faceSearch(p) {
+  const a = p.address, s = a.search || {};
+  const how = s.scan_stopped
+    ? `SSDP SEARCH ONLY · SUBNET SCAN STOPPED<br>AFTER ${s.scans} EMPTY PASSES`
+    : s.subnets?.length ? `SSDP SEARCH, THEN SCAN OF ${s.subnets.map(esc).join(", ")}` : `SSDP SEARCH`;
+  const clock = s.next_s == null ? `SEARCHING…`
+    : (s.scan_limit && !s.scan_stopped ? `SEARCH ${s.scans + 1} OF ${s.scan_limit} · ` : ``)
+      + `NEXT IN ${timer(s.next_s, "down")}`;
+  return `
+    <canvas class="searchbox" data-anim="radar"></canvas>
+    <div class="statword offline">OFFLINE</div>
+    <div class="askline"><b>SEARCHING THE NETWORK…</b><br>${how}
+      ${a.last_ip ? `<br>LAST SEEN AT ${esc(a.last_ip)}` : ""}</div>
+    <div class="askrow"><button class="cbtn addr" data-act="addr">⌨ ENTER ADDRESS</button></div>
+    <div class="askclock">${clock}</div>`;
+}
+const validIp = s => /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(s);
+let addrDialog = null;   // {id, show(msg)} while the address dialog is open
+function addressModal(id) {
+  const p = fleet.find(x => x.id === id); if (!p) return;
+  closeModal();
+  const last = p.address?.last_ip || p.address?.ip || "";
+  let addr = last.replace(/\d+$/, ""), remember = true, busy = false;
+  const dim = document.createElement("div"); dim.className = "dim";
+  dim.innerHTML = `<div class="modal cyanline addrmodal"><div class="inner">
+    <h3>⌨ SET ADDRESS — ${esc(p.name)}</h3>
+    <p>${last ? `${esc(p.name)} stopped answering at <span style="color:#bfe9ff">${esc(last)}</span>.`
+              : `${esc(p.name)} has no address yet.`}
+      Type its current address. It's on the printer's screen under Settings → Network.
+      Or let the console search for it.</p>
+    <div class="addrshow" id="as"></div>
+    <div class="addrhint" id="ah"></div>
+    <div class="keypad">${[1,2,3,4,5,6,7,8,9].map(n => `<button data-k="${n}">${n}</button>`).join("")}
+      <button data-k=".">.</button><button data-k="0">0</button><button data-k="bs" class="fn">⌫</button></div>
+    <div class="remember" id="rm"><span class="box">✓</span>SAVE TO CONFIG.JSON</div>
+    <div id="res"></div>
+    <div class="row">
+      <button class="cbtn addr" style="flex:1.2" id="go">CONNECT</button>
+      <button class="cbtn" style="flex:1" id="af">⌖ AUTO-FIND</button>
+      <button class="cbtn later" style="flex:.8" id="later">LATER</button>
+    </div></div></div>`;
+  document.body.appendChild(dim); pendingModal = dim;
+  const $ = q => dim.querySelector(q);
+  const close = () => { addrDialog = null; closeModal(); };
+  function draw() {
+    $("#as").innerHTML = (esc(addr) || '<span style="color:#33507c">0.0.0.0</span>') + '<span class="cur"></span>';
+    const tooBig = addr.split(".").some(x => x !== "" && +x > 255);
+    $("#as").classList.toggle("bad", tooBig);
+    $("#ah").className = "addrhint" + (tooBig ? " bad" : "");
+    $("#ah").textContent = tooBig ? "EACH PART MUST BE 0–255" : validIp(addr) ? "" : "FOUR NUMBERS SEPARATED BY DOTS";
+    $("#go").disabled = !validIp(addr) || busy;
+  }
+  function key(k) {
+    if (busy) return;
+    if (k === "bs") addr = addr.slice(0, -1);
+    else if (k === ".") { if (addr && !addr.endsWith(".") && addr.split(".").length < 4) addr += "."; }
+    else if (addr.split(".").pop().length < 3 && addr.length < 15) addr += k;
+    $("#res").innerHTML = ""; draw();
+  }
+  dim.querySelectorAll("[data-k]").forEach(b => b.onclick = () => key(b.dataset.k));
+  // Consume the keys the dialog handles. Without this, Enter also "clicks" whatever button
+  // still has focus (the panel's ENTER ADDRESS button), reopening a fresh dialog.
+  document.activeElement?.blur?.();
+  const onKey = e => {
+    if (!dim.isConnected) return document.removeEventListener("keydown", onKey, true);
+    if (/^[0-9.]$/.test(e.key)) key(e.key);
+    else if (e.key === "Backspace") key("bs");
+    else if (e.key === "Enter") { if (!$("#go").disabled) $("#go").click(); }
+    else if (e.key === "Escape") close();
+    else return;
+    e.preventDefault(); e.stopPropagation();
+  };
+  document.addEventListener("keydown", onKey, true);
+  $("#rm").onclick = () => { remember = !remember; $("#rm .box").textContent = remember ? "✓" : ""; };
+  $("#later").onclick = close;
+  $("#af").onclick = () => {
+    send({ type: "cmd", id, action: "auto_find" });
+    close(); toast(`SEARCHING THE NETWORK FOR ${p.name}`);
+  };
+  $("#go").onclick = () => {
+    if (!wsUp) { $("#res").innerHTML = `<div class="result warn">LINK TO THE CONSOLE IS DOWN — TRY AGAIN IN A MOMENT.</div>`; return; }
+    busy = true; draw();
+    $("#res").innerHTML = `<div class="result testing"><span class="spin"></span>TESTING ${esc(addr)} — LOGGING IN WITH ${esc(p.name)}'S ACCESS CODE…</div>`;
+    send({ type: "cmd", id, action: "set_address", ip: addr, save: remember });
+  };
+  addrDialog = {
+    id,
+    show(msg) {
+      busy = false;
+      if (msg.result === "ok") {
+        const saved = msg.saved ? " SAVED TO CONFIG.JSON."
+          : msg.save_error ? ` COULD NOT SAVE (${esc(msg.save_error)}); USING IT UNTIL RESTART.`
+          : " THIS SESSION ONLY.";
+        $("#res").innerHTML = `<div class="result ok">✓ CONNECTED — ${esc(p.name)} IS AT ${esc(msg.ip)}.${saved}</div>`;
+        setTimeout(() => { if (addrDialog?.id === id) close(); }, msg.save_error ? 4000 : 1800);
+      } else if (msg.result === "refused") {
+        $("#res").innerHTML = `<div class="result warn">A PRINTER ANSWERED AT ${esc(msg.ip)}, BUT IT ISN'T ${esc(p.name)} — IT REFUSED THIS PRINTER'S ACCESS CODE. CHECK THE ADDRESS ON ${esc(p.name)}'S OWN SCREEN.</div>`;
+      } else {
+        $("#res").innerHTML = `<div class="result warn">NOTHING ANSWERED AT ${esc(msg.ip)}. CHECK THE NUMBER, OR TRY AUTO-FIND.</div>`;
+      }
+      draw();
+    },
+  };
+  draw();
+}
+function addressResult(msg) {
+  if (addrDialog && addrDialog.id === msg.id) addrDialog.show(msg);
+  else if (msg.result === "ok") toast(`${msg.id.toUpperCase()} CONNECTED AT ${msg.ip}`);
 }
 
 /* ================= modals ================= */
