@@ -230,6 +230,13 @@ asyncio.run(main())"
   full screen, z-index 50). The NO SIGNAL tag used to be `camtag dim`, which turned it
   into an invisible full-screen sheet that swallowed every tap in an offline printer's
   detail view (fixed in 1.8: `camtag nosig`).
+- **FTPS needs TLS session reuse.** The printer's FTP server is vsftpd with
+  `require_ssl_reuse`: a data connection (listing, upload) must resume the control
+  connection's TLS session, or it answers `522 SSL connection failed: session reuse required`
+  and drops the control connection. Stock `ftplib.FTP_TLS` does a fresh handshake, so
+  `_ImplicitFTPTLS.ntransfercmd()` passes `session=self.sock.session` — keep it. `_close()`
+  swallows the `quit()` failure on that dropped connection, which otherwise replaced the real
+  error with a BrokenPipeError (the dialog's blank "SD LIST FAILED — FTPS error:").
 - **DemoPrinter mirrors BambuPrinter's public surface exactly** (`view()`, `pause()`,
   `resume()`, `stop()`, `set_light()`, `start_print()`, `.id`/`.ip`/`.camera_kind`) so
   `server.py` treats real and simulated printers identically. If you add a method to

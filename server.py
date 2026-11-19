@@ -506,7 +506,7 @@ async def files_handler(request):
         return web.json_response({"files": files})
     except Exception as e:
         log.warning("%s: listing SD card files over FTPS failed: %r", p.id, e)
-        raise web.HTTPBadGateway(text=f"FTPS error: {e}")
+        raise web.HTTPBadGateway(text=f"FTPS error: {str(e) or type(e).__name__}")
 
 
 async def upload_handler(request):
@@ -540,7 +540,7 @@ async def upload_handler(request):
         return web.json_response({"ok": True, "name": name})
     except Exception as e:
         log.warning("%s: uploading %s over FTPS failed: %r", p.id, name, e)
-        raise web.HTTPBadGateway(text=f"FTPS error: {e}")
+        raise web.HTTPBadGateway(text=f"FTPS error: {str(e) or type(e).__name__}")
 
 
 # --------------------------------------------------------------- app

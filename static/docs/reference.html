@@ -90,7 +90,11 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
     <h2 id="s3"><span class="idx">03</span> FTPS + DISCOVERY</h2>
     <p><b>FTPS</b> — implicit TLS on port <b>990</b>, user <code>bblp</code>. Used to list
        <code>.3mf</code>/<code>.gcode</code> files in the SD root (MLSD, with NLST fallback)
-       and to upload new files ahead of a <code>project_file</code> command.</p>
+       and to upload new files ahead of a <code>project_file</code> command. The printer&rsquo;s
+       server (vsftpd) requires each data connection to resume the control connection&rsquo;s TLS
+       session; a fresh handshake gets <code>522 SSL connection failed: session reuse
+       required</code>, so <code>bambu/ftps.py</code> passes the session when it wraps a data
+       connection.</p>
     <p><b>SSDP discovery</b> — the console passively listens on UDP ports <b>2021</b> and
        <b>1990</b> for the printers&rsquo; periodic announcements, and joins the SSDP multicast
        group <code>239.255.255.250</code> they are sent to (Linux delivers multicast only to a
