@@ -571,7 +571,9 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           Paragraph("03 \u00b7 FTPS + DISCOVERY", S["h2"]), rule(),
           P("<b>FTPS</b> \u2014 implicit TLS on port 990, user bblp. Lists .3mf/.gcode in the SD "
             "root (MLSD with NLST fallback) and uploads new files ahead of a project_file "
-            "command."),
+            "command. The printer\u2019s server (vsftpd) requires each data connection to resume "
+            "the control connection\u2019s TLS session (otherwise: 522 session reuse required), "
+            "so the console passes the session when wrapping data connections."),
           P("<b>SSDP</b> \u2014 passive listener on UDP 2021 and 1990 for printer announcements, joining "
             "the multicast group 239.255.255.250 they are sent to (Linux delivers multicast only to a "
             "host that has joined it), "
