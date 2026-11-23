@@ -180,7 +180,10 @@ asyncio.run(main())"
 - **State derivation lives in `BambuPrinter.view()`**: `idle | printing | paused | error |
   offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. Only HMS
   entries at level 0001 (error) / 0002 (warning) count — the level is the code's third group
-  (`code >> 16`). Level 0003 is info (first-layer inspection, SD card notices) and goes to
+  (`code >> 16`) — and a 0002 warning (or a nonzero `print_error`) only while the printer has
+  stopped: on an X1C, `0C00_0300_0002_000C` (build plate marker not detected) turned a panel
+  ERROR while it printed normally, so a printer still reporting RUNNING/PREPARE shows printing
+  and the warning goes to `notices`. 0001 errors always count. Level 0003 is info (first-layer inspection, SD card notices) and goes to
   `notices` + the log instead: treating it as ERROR made every printer flash red on connect. If you add a
   new derived field, add it here and it flows to the frontend automatically via the existing
   WebSocket push.
