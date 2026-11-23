@@ -7,6 +7,8 @@ config.json.tmp
 
 # Runtime log (rotates to lab-console.log.1 .. .3)
 lab-console.log*
+# Windows supervisor (scripts/windows-startup.ps1): its own log, and Python's stderr
+lab-console.*.log
 
 # Python
 __pycache__/
