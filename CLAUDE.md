@@ -19,6 +19,12 @@ SD… (upload-only dialog) and a CLOUD tag, and `server.py` refuses `CLOUD_REFUS
 it — `mockups/cloud-controls-mockup.html`, option A; demo's OUTPOST-02 is one. Don't reintroduce wording that makes Developer
 Mode a requirement.
 
+**Where it runs now:** the owner's lab moved the console from the Pi to a Windows PC that is
+both server and display (a large touchscreen), because the Pi's wired segment could ping the
+printers but not reach their ports (or Bambu Cloud). The Pi 3 limits below still stand — keep
+it light — and nothing in `server.py` may assume Linux: `_prompt()` reads stdin through a
+thread because Windows' `select()` only takes sockets, and file I/O states UTF-8.
+
 Visual style is a deliberate design constraint, not incidental: a dark navy CRT-panel
 aesthetic with cyan vector line art, amber accents, and red/orange reserved *exclusively*
 for error states. Think Galaxy's Edge spaceport control panel. See "Design language" below
@@ -31,14 +37,14 @@ This project's folder is **`lab-console/`**. An older, incomplete prototype name
 `build_manual.py`. If your working directory is named `bambu-console` or uses
 `config.example.yaml` instead of `config.example.json`, **stop — you have the wrong copy.**
 
-Check `VERSION` at the repo root (should read 1.8.0), then confirm all 36 files are present:
+Check `VERSION` at the repo root (should read 1.8.0), then confirm all 37 files are present:
 
 ```bash
 cat VERSION
 find . -type f -not -path './.git/*' | sort
 ```
 
-Expected file manifest (36 files):
+Expected file manifest (37 files):
 
 ```
 ./CLAUDE.md
@@ -66,6 +72,7 @@ Expected file manifest (36 files):
 ./requirements.txt
 ./scripts/install-service.sh
 ./scripts/set-hostname.sh
+./scripts/windows-startup.ps1
 ./server.py
 ./static/app.js
 ./static/docs/LabConsole-Manual.pdf
@@ -114,6 +121,10 @@ config.example.json     copy to config.json and fill in real printer serials/acc
 lab-console.service     systemd unit for boot-time start (template: assumes pi, /home/pi/lab-console)
 scripts/install-service.sh installs the unit with this checkout's path + owner filled in, after
                           checking venv/config/ffmpeg/port; --check, --uninstall, --user
+scripts/windows-startup.ps1  Windows host that is also the display: -Install adds Startup +
+                          desktop shortcuts; a hidden supervisor runs server.py --no-prompt,
+                          restarts it, keeps the PC awake, opens Edge --kiosk; -Check/-Restart/
+                          -Stop/-Uninstall. Windows PowerShell 5.1 syntax only (no PS7 features)
 scripts/set-hostname.sh names the host (default labconsole) and sets up Avahi so the console
                           opens at http://<name>.local:<port>; --check reports only
 mockups/                standalone HTML mockups from the approval loop below — kept after
@@ -169,7 +180,10 @@ asyncio.run(main())"
 - **State derivation lives in `BambuPrinter.view()`**: `idle | printing | paused | error |
   offline`, derived from `gcode_state`, `hms`, `print_error`, and connectivity. Only HMS
   entries at level 0001 (error) / 0002 (warning) count — the level is the code's third group
-  (`code >> 16`). Level 0003 is info (first-layer inspection, SD card notices) and goes to
+  (`code >> 16`) — and a 0002 warning (or a nonzero `print_error`) only while the printer has
+  stopped: on an X1C, `0C00_0300_0002_000C` (build plate marker not detected) turned a panel
+  ERROR while it printed normally, so a printer still reporting RUNNING/PREPARE shows printing
+  and the warning goes to `notices`. 0001 errors always count. Level 0003 is info (first-layer inspection, SD card notices) and goes to
   `notices` + the log instead: treating it as ERROR made every printer flash red on connect. If you add a
   new derived field, add it here and it flows to the frontend automatically via the existing
   WebSocket push.

@@ -29,6 +29,10 @@ the console opens at `http://labconsole.local:8080` (same network only).
 Start it at boot: `sudo scripts/install-service.sh` installs it as a systemd service, filling in
 this folder and your account, and checks the venv, `config.json` and port first.
 
+On a Windows PC (server and display in one, e.g. a touchscreen):
+`powershell -ExecutionPolicy Bypass -File scripts/windows-startup.ps1 -Install` starts it at
+sign-in, keeps it running and opens it full screen in Edge. Setup steps are in the Admin Guide.
+
 ## Documentation
 
 Comprehensive documentation lives in the built-in **Technical Archive** -

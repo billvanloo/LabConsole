@@ -12,7 +12,7 @@ import logging.handlers
 import os
 import pathlib
 import re
-import select
+import queue
 import shutil
 import sys
 import threading
@@ -41,7 +41,7 @@ CONFIG_PATH = pathlib.Path(_args[0] if _args else ROOT / "config.json")
 if DEMO:
     CFG = {"http_port": 8080, "camera": {}, "printers": []}
 else:
-    CFG = json.loads(CONFIG_PATH.read_text())
+    CFG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 PRINTERS: dict[str, BambuPrinter] = {}
 _cfg_lock = threading.Lock()
 
@@ -53,14 +53,14 @@ def save_printer_ip(pid, ip):
     with 2-space indents). The temp file takes the original's permissions before it
     replaces it, since config.json holds access codes."""
     with _cfg_lock:
-        data = json.loads(CONFIG_PATH.read_text())
+        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         entry = next((pc for pc in data.get("printers", []) if pc.get("id") == pid), None)
         if entry is None:
             raise ValueError(f"{pid} is not in {CONFIG_PATH.name}")
         entry["ip"] = ip
         shutil.copy2(CONFIG_PATH, CONFIG_PATH.with_name(CONFIG_PATH.name + ".bak"))
         tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2) + "\n")
+        tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         shutil.copymode(CONFIG_PATH, tmp)
         os.replace(tmp, CONFIG_PATH)
         for pc in CFG.get("printers", []):
@@ -294,18 +294,31 @@ async def set_address(ws, p, req):
 
 
 # --------------------------------------------------------------- startup check
+_stdin_lines = None
+
+
 def _prompt(text, timeout):
-    """input() with a timeout. None on timeout or end of input."""
+    """input() with a timeout. None on timeout or end of input.
+
+    One background thread reads stdin and hands lines over a queue. select() on stdin
+    would be simpler but doesn't work on Windows, where the prompt then waited forever
+    and an unattended console never started."""
+    global _stdin_lines
+    if _stdin_lines is None:
+        _stdin_lines = queue.Queue()
+
+        def pump():
+            for line in iter(sys.stdin.readline, ""):
+                _stdin_lines.put(line)
+            _stdin_lines.put(None)      # end of input
+        threading.Thread(target=pump, name="stdin", daemon=True).start()
     print(text, end="", flush=True)
     try:
-        ready, _, _ = select.select([sys.stdin], [], [], timeout or None)
-    except (OSError, ValueError):   # no select() on this stdin: plain blocking read
-        ready = [sys.stdin]
-    if not ready:
+        line = _stdin_lines.get(timeout=timeout or None)
+    except queue.Empty:
         print()
         return None
-    line = sys.stdin.readline()
-    return line.strip() if line else None
+    return line.strip() if line is not None else None
 
 
 def startup_addresses():
@@ -561,7 +574,7 @@ async def index(request):
 def main():
     logfile = setup_logging()
     try:
-        version = re.search(r"^version:\s*(\S+)", (ROOT / "VERSION").read_text(), re.M)[1]
+        version = re.search(r"^version:\s*(\S+)", (ROOT / "VERSION").read_text(encoding="utf-8"), re.M)[1]
     except (OSError, TypeError):
         version = "?"
     log.info("Lab Console %s starting (%s); log file: %s", version,

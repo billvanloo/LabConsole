@@ -445,6 +445,21 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
                    "pi account \u2014 if yours differs, substitute your own home folder. "
                    "scripts/install-service.sh (section 04) fills in the right account and folder "
                    "in the service file for you."),
+          Paragraph("RUNNING ON WINDOWS", S["h3"]),
+          P("The console also runs on a Windows 10/11 PC, which can be both server and display "
+            "(e.g. a large touchscreen). Use it when the PC can reach the printers and another host "
+            "can\u2019t: a school network can let a segment ping the printers but block the ports the "
+            "console needs. Check from the PC first: <font face='Courier'>Test-NetConnection "
+            "&lt;printer-ip&gt; -Port 8883</font> must report TcpTestSucceeded True. Then, in Git Bash:"),
+          CODE("winget install -e --id Python.Python.3.12 --scope user\n"
+               "winget install -e --id Gyan.FFmpeg          # X1/H2D cameras\n"
+               "# reopen the terminal, then:\n"
+               "cd ~ && git clone https://github.com/billvanloo/LabConsole.git && cd LabConsole\n"
+               "py -m venv .venv\n"
+               ".venv/Scripts/python -m pip install -r requirements.txt\n"
+               "notepad config.json                         # paste in the fleet config\n"
+               ".venv/Scripts/python server.py config.json  # http://localhost:8080"),
+          P("To start it at sign-in and show it full screen, see section 04."),
           Paragraph("RUNNING ON UBUNTU / OTHER LINUX HOSTS", S["h3"]),
           P("The console runs unchanged on a standard Ubuntu machine (desktop or server) "
             "instead of a Raspberry Pi \u2014 nothing in the code is Pi-specific. Install the "
@@ -519,6 +534,17 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
           P("For a wall display, run a kiosk browser: "
             "<font face='Courier'>chromium-browser --kiosk http://localhost:8080</font>. The "
             "frontend pauses panel cycling while the tab is hidden."),
+          Paragraph("WINDOWS", S["h3"]),
+          CODE("powershell -ExecutionPolicy Bypass -File scripts/windows-startup.ps1 -Check\n"
+               "powershell -ExecutionPolicy Bypass -File scripts/windows-startup.ps1 -Install"),
+          P("No admin rights needed. -Install runs the same checks (.venv, created if missing; "
+            "config.json; ffmpeg; Edge), adds a Startup-folder shortcut so the console starts at "
+            "sign-in and a Lab Console desktop shortcut that reopens the dashboard, and starts it. "
+            "A hidden supervisor runs server.py with --no-prompt, restarts it if it stops (backing off "
+            "to 2 min if it keeps failing), keeps the PC and screen awake, and opens the dashboard "
+            "full screen in Edge (Alt+F4 leaves; -NoKiosk skips it). -Restart after a git pull, "
+            "-Stop, -Uninstall. Logs: lab-console.supervisor.log and lab-console.stderr.log beside "
+            "lab-console.log. The PC must stay signed in; it is not a Windows service."),
           Paragraph("05 \u00b7 TROUBLESHOOTING", S["h2"]), rule()]
     e += ref_table(["SYMPTOM", "LIKELY CAUSE / FIX"], [
         ["Anything not working as expected", "Start with lab-console.log in the console folder: it records each command with the printer\u2019s reply, and each connection, camera, and file error."],
@@ -564,8 +590,10 @@ def build(out="static/docs/LabConsole-Manual.pdf"):
             "temperatures and targets (chamber falls back to device.ctc.info.temp, low 16 bits, "
             "when chamber_temper is absent), cooling_fan_speed, spd_lvl_name, lights_report, AMS tray "
             "types/colors, and hms / print_error for the ERROR state. The third group of an HMS code is "
-            "its level: 0001 error, 0002 warning (pauses the print), 0003 info. Only 0001/0002 or a "
-            "nonzero print_error set ERROR; level-0003 notices (e.g. 0C00_0300_0003_000B, first-layer "
+            "its level: 0001 error, 0002 warning, 0003 info. 0001 always sets ERROR; a 0002 warning or "
+            "a nonzero print_error only if the printer has stopped (some warnings pause, others such "
+            "as 0C00_0300_0002_000C, build plate marker not detected, don\u2019t), otherwise they are "
+            "notices; level-0003 notices (e.g. 0C00_0300_0003_000B, first-layer "
             "inspection in progress) are logged but do not change the panel state."),
           Paragraph("02 \u00b7 CAMERA PROTOCOLS", S["h2"]), rule()]
     e += ref_table(["MODELS", "TRANSPORT", "CONSOLE RELAY"], [

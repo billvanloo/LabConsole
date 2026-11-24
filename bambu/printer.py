@@ -15,8 +15,11 @@ log = logging.getLogger("labconsole.printer")
 REPLY_TIMEOUT = 10.0
 
 # HMS level is the third group of the code (the high 16 bits of "code"): 0001 error,
-# 0002 warning (pauses the print), 0003 info, 0000 invalid. Info entries are routine
-# ("first layer inspection in progress"), so they must never raise the ERROR state.
+# 0002 warning, 0003 info, 0000 invalid. Info entries are routine ("first layer
+# inspection in progress"), so they must never raise the ERROR state. Warnings only
+# sometimes pause the print (filament runout does; "build plate marker not detected",
+# 0C00_0300_0002_000C, doesn't), so view() lets gcode_state decide: a warning on a
+# printer that still reports RUNNING is a notice, not ERROR.
 _HMS_INFO_LEVELS = {0, 3}
 
 # HMS entries that carry error level but report something other than a fault. Each is
@@ -315,12 +318,15 @@ class BambuPrinter:
             r = dict(self._report)
         gs = r.get("gcode_state", "")
         entries = [h for h in (r.get("hms") or []) if isinstance(h, dict)]
-        hms = [h for h in entries if _is_fault(h)]
-        notices = [h for h in entries if not _is_fault(h) and _hms_level(h) != 0]
+        running = gs in _RUNNING
+        # The printer saying it's still printing outranks a warning (and a leftover
+        # print_error): only a level-0001 error makes a running printer ERROR.
+        hms = [h for h in entries if _is_fault(h) and not (running and _hms_level(h) == 2)]
+        notices = [h for h in entries if h not in hms and _hms_level(h) != 0]
         err = int(r.get("print_error") or 0)
         if not self._online:
             state = "offline"
-        elif err or hms:
+        elif hms or (err and not running):
             state = "error"
         elif gs in _RUNNING:
             state = "printing"

@@ -63,8 +63,11 @@ device/&lt;SERIAL&gt;/request   → commands</code></pre>
        <code>cooling_fan_speed</code>, <code>spd_lvl_name</code>, <code>lights_report</code>,
        AMS tray types and colors, and <code>hms</code> / <code>print_error</code> for the
        ERROR state. The third group of an HMS code is its level: <code>0001</code> error,
-       <code>0002</code> warning (pauses the print), <code>0003</code> info. Only levels 0001
-       and 0002, or a nonzero <code>print_error</code>, set ERROR. Level 0003 entries are
+       <code>0002</code> warning, <code>0003</code> info. A level 0001 entry always sets ERROR.
+       A level 0002 warning, or a nonzero <code>print_error</code>, sets ERROR only if the printer
+       has stopped: some warnings pause the print (filament runout), others don&rsquo;t (for
+       example <code>0C00_0300_0002_000C</code>, build plate marker not detected), so while
+       <code>gcode_state</code> still reports printing they are notices. Level 0003 entries are
        routine notices (for example <code>0C00_0300_0003_000B</code>, first-layer inspection
        in progress); they are sent as <code>notices</code> and written to the log, but do not
        change the panel state.</p>
